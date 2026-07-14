@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  /* Core palette — "signal" system: deep ink sidebar, cool paper canvas, one electric accent */
+  --color-ink-950: #0B0F19;
+  --color-ink-900: #10152280;
+  --color-ink-900-solid: #101522;
+  --color-ink-800: #1A2033;
+  --color-ink-700: #262D42;
+  --color-ink-600: #384158;
+  --color-ink-500: #545E78;
+  --color-ink-400: #7C859C;
+
+  --color-paper-50: #F6F7FB;
+  --color-paper-100: #EEF0F7;
+  --color-paper-200: #E2E5F0;
+  --color-paper-300: #CBD0E0;
+
+  --color-signal-500: #4F5BFF;
+  --color-signal-600: #3D45E0;
+  --color-signal-400: #7B83FF;
+  --color-signal-100: #E9EAFF;
+
+  --color-mint-500: #17B897;
+  --color-mint-100: #DBF6EE;
+
+  --color-amber-500: #F2A93B;
+  --color-amber-100: #FCEBD1;
+
+  --color-coral-500: #F2596B;
+  --color-coral-100: #FDE1E5;
+
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-sans: "Inter", "Space Grotesk", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --radius-card: 18px;
+  --radius-pill: 999px;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-color: var(--color-paper-50);
+    color: var(--color-ink-900-solid);
+    font-family: var(--font-sans);
+  }
+  ::selection {
+    background: var(--color-signal-100);
+  }
+}
+
+@layer utilities {
+  .signal-gradient {
+    background: linear-gradient(135deg, #4F5BFF 0%, #7B83FF 55%, #9C7BFF 100%);
+  }
+  .mesh-glow {
+    background:
+      radial-gradient(circle at 15% 20%, rgba(79, 91, 255, 0.16), transparent 40%),
+      radial-gradient(circle at 85% 0%, rgba(156, 123, 255, 0.14), transparent 45%);
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-paper-300); border-radius: 999px; }
+  .card-hairline {
+    border: 1px solid var(--color-paper-200);
+  }
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: local("Space Grotesk");
+}
