@@ -40,7 +40,7 @@ export default function LeadDiscovery() {
       setJustSearched(false);
 
       const response = await fetch(
-        "http://localhost:3000/api/campaigns",
+        "https://smart-lead-gen.vercel.app/api/campaigns",
         {
           method: "POST",
           headers: {
