@@ -120,3 +120,19 @@ exports.startJob = async (req, res) => {
         });
     }
 };
+
+exports.completeJob = async (req, res) => {
+
+    await pool.query(`
+        UPDATE automation_jobs
+        SET
+            status='completed',
+            completed_at=NOW()
+        WHERE id=$1
+    `, [req.params.id]);
+
+    res.json({
+        success: true
+    });
+
+};
