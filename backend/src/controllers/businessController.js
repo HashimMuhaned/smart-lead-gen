@@ -1,28 +1,22 @@
 const pool = require("../db");
 
 exports.insertBusinesses = async (req, res) => {
+  const {
+    jobId,
 
-    const {
+    campaignId,
 
-        jobId,
+    businesses,
+  } = req.body;
 
-        campaignId,
+  const client = await pool.connect();
 
-        businesses
+  try {
+    await client.query("BEGIN");
 
-    } = req.body;
-
-    const client = await pool.connect();
-
-    try {
-
-        await client.query("BEGIN");
-
-        for (const business of businesses) {
-
-            const result = await client.query(
-
-                `
+    for (const business of businesses) {
+      const result = await client.query(
+        `
                 INSERT INTO businesses
                 (
                     campaign_id,
@@ -48,44 +42,39 @@ exports.insertBusinesses = async (req, res) => {
                 RETURNING id
                 `,
 
-                [
+        [
+          campaignId,
 
-                    campaignId,
+          business.name,
 
-                    business.name,
+          business.category,
 
-                    business.category,
+          business.address,
 
-                    business.address,
+          business.city,
 
-                    business.city,
+          business.country,
 
-                    business.country,
+          business.phone,
 
-                    business.phone,
+          business.website,
 
-                    business.website,
+          business.google_maps_url,
 
-                    business.google_maps_url,
+          business.google_rating,
 
-                    business.google_rating,
+          business.review_count,
 
-                    business.review_count,
+          business.social_links,
 
-                    business.social_links,
+          business.source,
+        ],
+      );
 
-                    business.source
+      const businessId = result.rows[0].id;
 
-                ]
-
-            );
-
-            const businessId =
-                result.rows[0].id;
-
-            await client.query(
-
-                `
+      await client.query(
+        `
                 INSERT INTO automation_jobs
                 (
                     campaign_id,
@@ -103,54 +92,34 @@ exports.insertBusinesses = async (req, res) => {
                 )
                 `,
 
-                [
+        [
+          campaignId,
 
-                    campaignId,
-
-                    JSON.stringify({
-
-                        businessId
-
-                    })
-
-                ]
-
-            );
-
-        }
-
-        await client.query("COMMIT");
-
-        res.json({
-
-            success: true,
-
-            inserted: businesses.length
-
-        });
-
+          JSON.stringify({
+            businessId,
+          }),
+        ],
+      );
     }
 
-    catch (err) {
+    await client.query("COMMIT");
 
-        await client.query("ROLLBACK");
+    res.json({
+      success: true,
 
-        console.error(err);
+      inserted: businesses.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
 
-        res.status(500).json({
+    console.error(err);
 
-            success: false,
+    res.status(500).json({
+      success: false,
 
-            message: err.message
-
-        });
-
-    }
-
-    finally {
-
-        client.release();
-
-    }
-
+      message: err.message,
+    });
+  } finally {
+    client.release();
+  }
 };
