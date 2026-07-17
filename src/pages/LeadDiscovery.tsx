@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Loader2, SlidersHorizontal } from "lucide-react";
 import { AppLayout } from "@/layout/AppLayout";
 import { LeadCard } from "@/components/LeadCard";
-import { searchRuns } from "@/data/mock";
+import type { SearchRun } from "@/types";
 
 const industries = [
   "Dental Clinics",
@@ -23,10 +23,41 @@ const filterOptions = [
 export default function LeadDiscovery() {
   const [industry, setIndustry] = useState(industries[0]);
   const [location, setLocation] = useState("Dubai, UAE");
-  const [numLeads, setNumLeads] = useState(200);
+  const [numLeads, setNumLeads] = useState(20); // Default to a smaller test limit
   const [activeFilters, setActiveFilters] = useState<string[]>(["hasWebsite"]);
   const [searching, setSearching] = useState(false);
   const [justSearched, setJustSearched] = useState(false);
+  
+  // Replace static mock runs with state
+  const [searchRuns, setSearchRuns] = useState<SearchRun[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // 1. Fetch campaigns from backend
+  async function fetchCampaigns() {
+    try {
+      const response = await fetch("https://smart-lead-gen.vercel.app/api/campaigns");
+      if (!response.ok) throw new Error("Failed to fetch campaigns history");
+      const data = await response.json();
+      if (data.success) {
+        setSearchRuns(data.campaigns);
+      }
+    } catch (err) {
+      console.error("Error fetching campaigns history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  // 2. Poll the API for status updates every 5 seconds
+  useEffect(() => {
+    fetchCampaigns(); // Run initially on load
+
+    const interval = setInterval(() => {
+      fetchCampaigns();
+    }, 5000); // Polling window of 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   function toggleFilter(id: string) {
     setActiveFilters((prev) =>
@@ -47,7 +78,7 @@ export default function LeadDiscovery() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            userId: "c2d0db33-6e49-492c-86c2-136d3d1478a6", // Placed here
+            userId: "c2d0db33-6e49-492c-86c2-136d3d1478a6",
             campaignName: `${industry} ${location}`,
             industry,
             location,
@@ -60,7 +91,8 @@ export default function LeadDiscovery() {
       if (!response.ok) throw new Error(data.message);
 
       setJustSearched(true);
-      console.log(data);
+      // Instantly refresh list so the newly queued job appears immediately
+      fetchCampaigns(); 
     } catch (err) {
       console.error(err);
     } finally {
@@ -74,7 +106,7 @@ export default function LeadDiscovery() {
       subtitle="Configure a search to find new local businesses"
     >
       <div className="grid lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 bg-white rounded-[var(--radius-card)] card-hairline p-6">
+        <div className="lg:col-span-2 bg-white rounded-card card-hairline p-6">
           <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-5">
             New Search
           </h3>
@@ -178,6 +210,7 @@ export default function LeadDiscovery() {
               "Configure industry, location & filters",
               "Search runs across Google Maps, Apollo & manual lists",
               "Results appear in Businesses for AI analysis",
+              "Enrich and identify target contact cards automatically",
             ].map((step, i) => (
               <li
                 key={step}
@@ -197,11 +230,22 @@ export default function LeadDiscovery() {
         <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-4">
           Previous Searches
         </h3>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {searchRuns.map((run) => (
-            <LeadCard key={run.id} run={run} />
-          ))}
-        </div>
+        
+        {loadingHistory ? (
+          <div className="flex items-center gap-2 text-ink-500 text-[13.5px]">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading run history...
+          </div>
+        ) : searchRuns.length === 0 ? (
+          <div className="text-ink-500 text-[13.5px] bg-white rounded-card card-hairline p-6 text-center">
+            No searches completed yet. Start your first search above!
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {searchRuns.map((run) => (
+              <LeadCard key={run.id} run={run} />
+            ))}
+          </div>
+        )}
       </div>
     </AppLayout>
   );

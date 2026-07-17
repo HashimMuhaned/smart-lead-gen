@@ -1,4 +1,10 @@
-export type LeadStatus = "Hot Lead" | "Warm Lead" | "Cold Lead" | "Contacted" | "Replied" | "Booked";
+export type LeadStatus =
+  | "Hot Lead"
+  | "Warm Lead"
+  | "Cold Lead"
+  | "Contacted"
+  | "Replied"
+  | "Booked";
 
 export interface Business {
   id: string;

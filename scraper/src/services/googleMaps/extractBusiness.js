@@ -1,4 +1,4 @@
-const { parseAddress } = require("./utils");
+const { parseAddress, cleanText } = require("./utils");
 
 /**
  * Extracts all profile details for a single business card (including fallback ratings & social profiles).
@@ -197,17 +197,17 @@ async function extractBusiness(page, card) {
 
   // Return standard schema
   return {
-    name,
-    category,
-    address,
-    city,
-    country,
-    phone,
-    website,
-    google_maps_url: googleMapsUrl,
-    google_rating: rating,
-    review_count: reviewCount,
-    social_links,
+    name: cleanText(name) || "Unknown Business",
+    category: cleanText(category),
+    address: cleanText(address),
+    city: cleanText(city),
+    country: cleanText(country),
+    phone: cleanText(phone),
+    website: website, // Keep raw website URL intact
+    google_maps_url: googleMapsUrl, // Keep raw Google Maps URL intact
+    google_rating: rating, // Numeric, no cleaning needed
+    review_count: reviewCount, // Numeric, no cleaning needed
+    social_links: cleanText(social_links), // JSON object, no string cleaning needed here
     source: "google_maps",
   };
 }

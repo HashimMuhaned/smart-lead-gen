@@ -18,4 +18,17 @@ function parseAddress(address) {
   return { city, country };
 }
 
-module.exports = { parseAddress };
+/**
+ * Cleans text by stripping emojis, weird unicode icons, control characters,
+ * and collapsing multiple spaces while preserving English & Arabic characters.
+ */
+function cleanText(text) {
+  if (!text) return null;
+
+  return text
+    .replace(/[^\x20-\x7E\u0600-\u06FF]/g, "") // remove icons/control chars, keep standard ASCII and Arabic
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+module.exports = { parseAddress, cleanText };

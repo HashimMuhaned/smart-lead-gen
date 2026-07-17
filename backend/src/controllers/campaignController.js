@@ -149,3 +149,71 @@ exports.failJob = async (req, res) => {
     });
   }
 };
+
+// Add this method to backend/src/controllers/campaignController.js
+exports.getCampaigns = async (req, res) => {
+  try {
+    // We fetch campaigns, aggregate their scraped businesses count, 
+    // and grab the corresponding scraping automation job's status.
+    const result = await pool.query(`
+      SELECT 
+        c.id,
+        c.name,
+        c.industry,
+        c.target_location AS "location",
+        c.created_at AS "startedAt",
+        c.status AS "campaignStatus",
+        COALESCE(j.status, 'queued') AS "jobStatus",
+        j.input->>'maxLeads' AS "maxLeads",
+        (
+          SELECT COUNT(*)::int 
+          FROM businesses b 
+          WHERE b.campaign_id = c.id
+        ) AS "leadsFound"
+      FROM campaigns c
+      LEFT JOIN automation_jobs j 
+        ON j.campaign_id = c.id AND j.job_type = 'scraping'
+      ORDER BY c.created_at DESC
+    `);
+
+    // Map database structures directly to the camelCase properties the frontend layout relies on
+    const campaigns = result.rows.map(row => {
+      // Formats the timestamp to 'YYYY-MM-DD HH:mm'
+      const date = new Date(row.startedAt);
+      const formattedDate = date.toISOString().replace('T', ' ').substring(0, 16);
+
+      // Determine a singular consolidated UI status
+      let status = "Completed";
+      if (row.jobStatus === "running") status = "Processing";
+      else if (row.jobStatus === "failed") status = "Failed";
+      else if (row.jobStatus === "queued") status = "Queued";
+
+      // Reconstruct the filters array dynamically based on options they selected
+      const filters = ["Has Website"]; // Default baseline
+      if (row.maxLeads) {
+        filters.push(`Max Leads: ${row.maxLeads}`);
+      }
+
+      return {
+        id: row.id,
+        industry: row.industry,
+        location: row.location,
+        leadsFound: row.leadsFound || 0,
+        status,
+        startedAt: formattedDate,
+        filters
+      };
+    });
+
+    res.json({
+      success: true,
+      campaigns
+    });
+  } catch (err) {
+    console.error("Fetch Campaigns Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
