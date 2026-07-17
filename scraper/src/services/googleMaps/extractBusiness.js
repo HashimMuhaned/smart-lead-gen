@@ -2,8 +2,8 @@ const { parseAddress } = require("./utils");
 
 /**
  * Extracts all profile details for a single business card (including fallback ratings & social profiles).
- * @param {import('playwright').Page} page 
- * @param {import('playwright').Locator} card 
+ * @param {import('playwright').Page} page
+ * @param {import('playwright').Locator} card
  * @returns {Promise<object>}
  */
 async function extractBusiness(page, card) {
@@ -18,7 +18,9 @@ async function extractBusiness(page, card) {
 
   // --- STRATEGY 1: Extract ratings/reviews from the LEFT PREVIEW CARD ---
   try {
-    const ratingElement = card.locator('span[aria-label*="stars"], span[aria-label*="star"]').first();
+    const ratingElement = card
+      .locator('span[aria-label*="stars"], span[aria-label*="star"]')
+      .first();
     if (await ratingElement.isVisible()) {
       const rawLabel = await ratingElement.getAttribute("aria-label");
       const ratingMatch = rawLabel.match(/(\d[\.,]\d)/);
@@ -27,7 +29,9 @@ async function extractBusiness(page, card) {
       }
     }
 
-    const reviewElement = card.locator('span[aria-label*="review"], span[aria-label*="opinions"]').first();
+    const reviewElement = card
+      .locator('span[aria-label*="review"], span[aria-label*="opinions"]')
+      .first();
     if (await reviewElement.isVisible()) {
       const rawReviews = await reviewElement.getAttribute("aria-label");
       const countMatch = rawReviews.match(/(\d[\d,\.]*)/);
@@ -36,7 +40,10 @@ async function extractBusiness(page, card) {
       }
     }
   } catch (e) {
-    console.warn(`[${name}] Card preview metrics fallback triggered:`, e.message);
+    console.warn(
+      `[${name}] Card preview metrics fallback triggered:`,
+      e.message,
+    );
   }
 
   // Details fields
@@ -50,34 +57,52 @@ async function extractBusiness(page, card) {
     // 1. Click to trigger dynamic sidebar hydration
     await card.click();
 
-    // 2. Wait for sidebar panel container to render and stabilize 
-    await page.waitForSelector('h1', { timeout: 10000 });
+    // 2. Wait for sidebar panel container to render and stabilize
+    await page.waitForSelector("h1", { timeout: 10000 });
     await page.waitForTimeout(1000); // Safety buffer for dynamic JS rendering
 
     // --- STRATEGY 2: Failsafe Backup for Ratings inside the SIDEBAR ---
+    // --- STRATEGY 2: Failsafe Backup for Ratings inside the SIDEBAR ---
     if (!rating || !reviewCount) {
       try {
-        const sidebarRatingContainer = page.locator('div[class*="F7nice"]').first(); 
-        if (await sidebarRatingContainer.isVisible()) {
-          const ratingText = await sidebarRatingContainer.locator('span[aria-hidden="true"]').first().innerText();
-          if (ratingText && !isNaN(parseFloat(ratingText))) {
-            rating = parseFloat(ratingText.trim().replace(",", "."));
+        // Find the rating container
+        const sidebarRatingContainer = page
+          .locator('div[class*="F7nice"]')
+          .first();
+
+        // Pass a short timeout to isVisible so it doesn't wait 30s
+        if (await sidebarRatingContainer.isVisible({ timeout: 2000 })) {
+          const ratingEl = sidebarRatingContainer
+            .locator('span[aria-hidden="true"]')
+            .first();
+          if (await ratingEl.isVisible({ timeout: 1000 })) {
+            const ratingText = await ratingEl.innerText();
+            if (ratingText && !isNaN(parseFloat(ratingText))) {
+              rating = parseFloat(ratingText.trim().replace(",", "."));
+            }
           }
 
-          const sidebarReviewsText = await sidebarRatingContainer
+          const reviewEl = sidebarRatingContainer
             .locator('span[aria-label*="review"], span[aria-label*="opinions"]')
-            .first()
-            .getAttribute("aria-label");
+            .first();
 
-          if (sidebarReviewsText) {
-            const countMatch = sidebarReviewsText.match(/(\d[\d,\.]*)/);
-            if (countMatch) {
-              reviewCount = parseInt(countMatch[1].replace(/[\.,]/g, ""), 10);
+          if (await reviewEl.isVisible({ timeout: 1000 })) {
+            const sidebarReviewsText = await reviewEl.getAttribute(
+              "aria-label",
+              { timeout: 1000 },
+            );
+            if (sidebarReviewsText) {
+              const countMatch = sidebarReviewsText.match(/(\d[\d,\.]*)/);
+              if (countMatch) {
+                reviewCount = parseInt(countMatch[1].replace(/[\.,]/g, ""), 10);
+              }
             }
           }
         }
       } catch (sidebarMetricsErr) {
-        console.warn(`[${name}] Could not parse ratings from sidebar elements:`, sidebarMetricsErr.message);
+        console.warn(
+          `[${name}] Sidebar metrics fallback skipped (Timeout/Not present)`,
+        );
       }
     }
 
@@ -85,7 +110,7 @@ async function extractBusiness(page, card) {
     const categorySelectors = [
       'button[jsaction*="pane.rating.category"]',
       'span[class*="fontBodyMedium"] button',
-      '.fontBodyMedium'
+      ".fontBodyMedium",
     ];
     for (const selector of categorySelectors) {
       const catEl = page.locator(selector).first();
@@ -100,7 +125,7 @@ async function extractBusiness(page, card) {
       'button[data-item-id="address"]',
       '[data-tooltip*="Copy address"]',
       '[data-item-id*="address"]',
-      'button[aria-label*="Address:"]'
+      'button[aria-label*="Address:"]',
     ];
     for (const selector of addressSelectors) {
       const addEl = page.locator(selector).first();
@@ -115,7 +140,7 @@ async function extractBusiness(page, card) {
       'button[data-item-id^="phone:tel:"]',
       '[data-tooltip*="Copy phone number"]',
       'button[aria-label*="Phone:"]',
-      'button[data-item-id*="phone"]'
+      'button[data-item-id*="phone"]',
     ];
     for (const selector of phoneSelectors) {
       const phoneEl = page.locator(selector).first();
@@ -130,7 +155,7 @@ async function extractBusiness(page, card) {
       'a[data-item-id="authority"]',
       'a[aria-label*="Website:"]',
       'a[data-tooltip*="Open website"]',
-      'a[href^="http"]:not([href*="google.com"])'
+      'a[href^="http"]:not([href*="google.com"])',
     ];
     for (const selector of websiteSelectors) {
       const webEl = page.locator(selector).first();
@@ -144,20 +169,27 @@ async function extractBusiness(page, card) {
     }
 
     // 7. Social Profile Links extraction
-    const rawLinks = await page.locator('a[href*="facebook.com"], a[href*="instagram.com"], a[href*="linkedin.com"], a[href*="twitter.com"], a[href*="youtube.com"], a[href*="x.com"]').all();
+    const rawLinks = await page
+      .locator(
+        'a[href*="facebook.com"], a[href*="instagram.com"], a[href*="linkedin.com"], a[href*="twitter.com"], a[href*="youtube.com"], a[href*="x.com"]',
+      )
+      .all();
     for (const linkEl of rawLinks) {
       const href = await linkEl.getAttribute("href");
       if (href) {
         if (href.includes("facebook.com")) social_links.facebook = href;
         else if (href.includes("instagram.com")) social_links.instagram = href;
         else if (href.includes("linkedin.com")) social_links.linkedin = href;
-        else if (href.includes("twitter.com") || href.includes("x.com")) social_links.twitter = href;
+        else if (href.includes("twitter.com") || href.includes("x.com"))
+          social_links.twitter = href;
         else if (href.includes("youtube.com")) social_links.youtube = href;
       }
     }
-
   } catch (detailError) {
-    console.warn(`Could not extract full sidebar details for "${name}":`, detailError.message);
+    console.warn(
+      `Could not extract full sidebar details for "${name}":`,
+      detailError.message,
+    );
   }
 
   // Parse location components using helpers
