@@ -1,9 +1,20 @@
 const express = require("express");
+const cors = require("cors"); // 1. Import cors
 const campaignRoutes = require("../frontend/src/routes/campaigns");
 const businessRoutes = require("../frontend/src/routes/businesses");
 require('dotenv').config();
 
 const app = express();
+
+// 2. Configure CORS options
+const corsOptions = {
+    origin: "https://smart-lead-gen-frontend.vercel.app",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true // Allow cookies/auth headers if needed
+};
+
+app.use(cors(corsOptions)); // 3. Use it before your routes
 app.use(express.json());
 
 // Wire up routes directly
