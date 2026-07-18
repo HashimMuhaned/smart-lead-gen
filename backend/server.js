@@ -1,6 +1,6 @@
 const express = require("express");
-const campaignRoutes = require("../src/routes/campaigns");
-const businessRoutes = require("../src/routes/businesses");
+const campaignRoutes = require("../frontend/src/routes/campaigns");
+const businessRoutes = require("../frontend/src/routes/businesses");
 require('dotenv').config();
 
 const app = express();

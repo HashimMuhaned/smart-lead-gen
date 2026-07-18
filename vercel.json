@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://smart-lead-gen-backend.vercel.app/api/:path*"
-    }
-  ]
-}
