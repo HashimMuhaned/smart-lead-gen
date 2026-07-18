@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors"); // 1. Import cors
-const campaignRoutes = require("../frontend/src/routes/campaigns");
-const businessRoutes = require("../frontend/src/routes/businesses");
+const campaignRoutes = require("./src/routes/campaigns");
+const businessRoutes = require("./src/routes/businesses");
 require('dotenv').config();
 
 const app = express();
