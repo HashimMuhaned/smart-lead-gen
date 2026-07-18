@@ -10,8 +10,6 @@ const app = express();
 const corsOptions = {
     origin: "https://smart-lead-gen-frontend.vercel.app",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true // Allow cookies/auth headers if needed
 };
 
 app.use(cors(corsOptions)); // 3. Use it before your routes
