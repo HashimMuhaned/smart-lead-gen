@@ -196,6 +196,7 @@ async function extractBusiness(page, card) {
   const { city, country } = parseAddress(address);
 
   // Return standard schema
+  // Return standard schema with clean data
   return {
     name: cleanText(name) || "Unknown Business",
     category: cleanText(category),
@@ -207,7 +208,7 @@ async function extractBusiness(page, card) {
     google_maps_url: googleMapsUrl, // Keep raw Google Maps URL intact
     google_rating: rating, // Numeric, no cleaning needed
     review_count: reviewCount, // Numeric, no cleaning needed
-    social_links: cleanText(social_links), // JSON object, no string cleaning needed here
+    social_links: social_links, // PASS RAW OBJECT - Removed cleanText wrapper
     source: "google_maps",
   };
 }
