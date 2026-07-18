@@ -1,7 +1,5 @@
 const pool = require("../db");
 
-const pool = require("../db");
-
 exports.insertBusinesses = async (req, res) => {
   const { jobId, campaignId, businesses } = req.body;
 
