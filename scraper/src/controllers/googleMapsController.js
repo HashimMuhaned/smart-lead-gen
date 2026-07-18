@@ -2,7 +2,7 @@ const { scrape } = require("../services/googleMapScraper");
 const axios = require("axios");
 
 // Your main backend URL (fallback to localhost if env isn't set)
-const BACKEND_URL = "https://smart-lead-gen.vercel.app";
+const BACKEND_URL = "https://smart-lead-gen-backend.vercel.app/";
 
 exports.scrapeGoogleMaps = async (req, res) => {
   const { jobId, campaignId, industry, location, limit } = req.body;
