@@ -1,20 +1,19 @@
 const express = require("express");
-const campaignRoutes = require("./src/routes/campaigns");
-const businessRoutes = require("./src/routes/businesses");
+// Added an extra dot (..) to go up out of the api folder into src
+const campaignRoutes = require("../src/routes/campaigns"); 
+const businessRoutes = require("../src/routes/businesses");
 require('dotenv').config();
 
 const app = express();
 
 app.use(express.json());
 
-// --- ADD THIS TRICK FOR VERCEL PREFLIGHTS ---
-// Intercept all OPTIONS requests and respond instantly with 200 OK
+// You can safely keep or remove the app.options wrapper here 
+// since vercel.json will be handling it cleanly now.
 app.options("/*", (req, res) => {
     res.sendStatus(200);
 });
-// --------------------------------------------
 
-// Wire up your actual routes
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/businesses", businessRoutes);
 
