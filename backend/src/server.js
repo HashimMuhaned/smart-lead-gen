@@ -6,21 +6,32 @@ require('dotenv').config();
 
 const app = express();
 
-// Update CORS to explicitly accept your environments
+// Use a cleaner fallback config for local execution, Vercel will override this using vercel.json in prod
 app.use(cors({
-    origin: [
-        "https://smart-lead-gen-858q.vercel.app", // Your specific Vercel production frontend
-        "http://localhost:3000",                  // Your local development port (change if using 5173, etc.)
-        "http://localhost:5173"                   // Vite default port, just in case
-    ],
+    origin: function (origin, callback) {
+        const allowedOrigins = [
+            "https://smart-lead-gen-858q.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5173"
+        ];
+        // Allow server-to-server requests (like your scraper hitting the backend directly with no origin header)
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error("Not allowed by CORS"));
+        }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], 
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true                             // Required if sending tokens/cookies
+    credentials: true
 }));
 
 app.use(express.json());
 
-// Wire up your structural routes
+// Explicitly catch and instantly return 200 OK for any baseline preflight OPTIONS requests
+app.options("*", cors());
+
+// Wire up structural routes
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/businesses", businessRoutes);
 
