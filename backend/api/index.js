@@ -9,7 +9,7 @@ const isProd = process.env.NODE_ENV === "production";
 
 // Define allowed origins explicitly
 const allowedOrigins = [
-    "https://smart-lead-gen-858q.vercel.app", 
+    "https://smart-lead-gen-frontend.vercel.app", 
     "http://localhost:3000", 
     "http://localhost:5173"
 ];

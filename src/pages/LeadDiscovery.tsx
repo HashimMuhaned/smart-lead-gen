@@ -35,7 +35,7 @@ export default function LeadDiscovery() {
   // 1. Fetch campaigns from backend
   async function fetchCampaigns() {
     try {
-      const response = await fetch("https://smart-lead-gen.vercel.app/api/campaigns");
+      const response = await fetch("https://smart-lead-gen-backend.vercel.app/api/campaigns");
       if (!response.ok) throw new Error("Failed to fetch campaigns history");
       const data = await response.json();
       if (data.success) {
@@ -71,7 +71,7 @@ export default function LeadDiscovery() {
       setJustSearched(false);
 
       const response = await fetch(
-        "https://smart-lead-gen.vercel.app/api/campaigns",
+        "https://smart-lead-gen-backend.vercel.app/api/campaigns",
         {
           method: "POST",
           headers: {
@@ -197,7 +197,7 @@ export default function LeadDiscovery() {
           )}
         </div>
 
-        <div className="bg-white rounded-[var(--radius-card)] card-hairline p-6">
+        <div className="bg-white rounded-card card-hairline p-6">
           <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-1">
             How discovery works
           </h3>
