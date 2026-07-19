@@ -1,8 +1,13 @@
 const express = require("express");
 const router = express.Router();
-
-const { insertBusinesses } = require("../controllers/businessController");
+const {
+  insertBusinesses,
+  getBusinessById,
+  insertBulkContacts,
+} = require("../controllers/businessController");
 
 router.post("/bulk", insertBusinesses);
+router.get("/:id", getBusinessById);
+router.post("/:id/contacts/bulk", insertBulkContacts);
 
 module.exports = router;

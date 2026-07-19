@@ -1,4 +1,8 @@
 const pool = require("../db");
+const axios = require("axios");
+
+// Put your enrichment webhook URL here (save to .env later as N8N_ENRICHMENT_WEBHOOK_URL)
+const N8N_ENRICHMENT_WEBHOOK = "https://n8nselfhostedautomations.tech/webhook/contact-enrichment";
 
 exports.insertBusinesses = async (req, res) => {
   const { jobId, campaignId, businesses } = req.body;
@@ -15,21 +19,21 @@ exports.insertBusinesses = async (req, res) => {
 
   let insertedCount = 0;
   let skippedCount = 0;
+  const queuedJobsToDispatch = []; // Holds references for the webhook trigger loop
 
   try {
     await client.query("BEGIN");
 
     for (const business of businesses) {
-      // Use ON CONFLICT DO NOTHING to drop duplicate pins inside the same campaign safely
       const result = await client.query(
         `
         INSERT INTO businesses
         (
           campaign_id, name, category, address, city, country, 
           phone, website, google_maps_url, google_rating, 
-          review_count, social_links, source
+          review_count, social_links, source, workflow_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'enriching')
         ON CONFLICT (campaign_id, google_maps_url) DO NOTHING
         RETURNING id
         `,
@@ -50,25 +54,29 @@ exports.insertBusinesses = async (req, res) => {
         ]
       );
 
-      // If rows were returned, it's a brand new insert! Proceed with the enrichment queue
       if (result.rows.length > 0) {
         insertedCount++;
         const businessId = result.rows[0].id;
 
-        await client.query(
+        const jobResult = await client.query(
           `
           INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
           VALUES ($1, $2, 'contact_enrichment', 'queued', $3)
+          RETURNING id
           `,
           [campaignId, businessId, JSON.stringify({ businessId })]
         );
+        
+        // Save to the array so we can safely loop after the DB transaction completes
+        queuedJobsToDispatch.push({
+          jobId: jobResult.rows[0].id,
+          businessId: businessId
+        });
       } else {
         skippedCount++;
       }
     }
 
-    // Point 2: Update campaign total_leads dynamically using the reliable COUNT strategy
-    // Point 1: Automatically advance campaign status to 'enriching' now that scraping is finished
     await client.query(
       `
       UPDATE campaigns 
@@ -81,17 +89,9 @@ exports.insertBusinesses = async (req, res) => {
       [campaignId]
     );
 
-    // Point 3: Calculate execution parameters for contextual debugging outputs
     const executionTime = `${((Date.now() - startTime) / 1000).toFixed(2)}s`;
-    
-    const jobOutput = {
-      inserted: insertedCount,
-      skipped: skippedCount,
-      executionTime,
-      source: "google_maps"
-    };
+    const jobOutput = { inserted: insertedCount, skipped: skippedCount, executionTime, source: "google_maps" };
 
-    // Store structural log outputs inside our active scraping job row
     await client.query(
       `
       UPDATE automation_jobs
@@ -103,6 +103,22 @@ exports.insertBusinesses = async (req, res) => {
 
     await client.query("COMMIT");
 
+    // --- NEW: ASYNCHRONOUS PUSH TO n8n ---
+    // We run this in an IIFE background loop so the API can instantly respond to the scraper.
+    (async () => {
+      console.log(`[Push Dispatcher] Spawning out ${queuedJobsToDispatch.length} enrichment jobs to n8n...`);
+      for (const targetJob of queuedJobsToDispatch) {
+        try {
+          axios.post(N8N_ENRICHMENT_WEBHOOK, {
+            jobId: targetJob.jobId,
+            businessId: targetJob.businessId
+          }).catch(e => console.error(`[Push Error] Failed dispatch for job ${targetJob.jobId}:`, e.message));
+        } catch (err) {
+          // Soft catch to prevent background thread breaks
+        }
+      }
+    })();
+
     res.json({
       success: true,
       ...jobOutput
@@ -110,10 +126,71 @@ exports.insertBusinesses = async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Bulk Ingestion Layer Error:", err);
-    res.status(500).json({
-      success: false,
-      message: err.message,
-    });
+    res.status(500).json({ success: false, message: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+
+exports.getBusinessById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query("SELECT id, name, website, city, country, phone FROM businesses WHERE id = $1", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Business not found" });
+    }
+    res.json({ success: true, business: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.insertBulkContacts = async (req, res) => {
+  const { id } = req.params; // business_id
+  const { contacts } = req.body;
+
+  if (!contacts || !Array.isArray(contacts)) {
+    return res.status(400).json({ success: false, message: "Missing 'contacts' array." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    for (const contact of contacts) {
+      await client.query(
+        `
+        INSERT INTO contacts (
+          business_id, first_name, last_name, job_title, email, phone, linkedin_url, source, enrichment_status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed')
+        `,
+        [
+          id,
+          contact.first_name || null,
+          contact.last_name || null,
+          contact.job_title || null,
+          contact.email || null,
+          contact.phone || null,
+          contact.linkedin_url || null,
+          contact.source || "enrichment_pipeline"
+        ]
+      );
+    }
+
+    // Upgrade business lifecycle status
+    await client.query(
+      "UPDATE businesses SET workflow_status = 'enriched' WHERE id = $1",
+      [id]
+    );
+
+    await client.query("COMMIT");
+    res.json({ success: true, message: `Successfully inserted ${contacts.length} contacts.` });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
   } finally {
     client.release();
   }
