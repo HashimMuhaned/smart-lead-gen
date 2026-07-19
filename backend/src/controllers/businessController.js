@@ -2,7 +2,7 @@ const pool = require("../db");
 const axios = require("axios");
 
 // Put your enrichment webhook URL here (save to .env later as N8N_ENRICHMENT_WEBHOOK_URL)
-const N8N_ENRICHMENT_WEBHOOK = "https://n8nselfhostedautomations.tech/webhook/contact-enrichment";
+const N8N_ENRICHMENT_WEBHOOK = "https://n8nselfhostedautomations.tech/webhook-test/contact-enrichment";
 
 exports.insertBusinesses = async (req, res) => {
   const { jobId, campaignId, businesses } = req.body;
