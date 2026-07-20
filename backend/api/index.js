@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors"); // Import the cors package
 const campaignRoutes = require("../src/routes/campaigns"); 
 const businessRoutes = require("../src/routes/businesses");
+const contactRoutes = require("../src/routes/contacts");
 require('dotenv').config();
 
 const app = express();
@@ -36,6 +37,7 @@ app.options(/.*/, cors());
 
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/businesses", businessRoutes);
+app.use("/api/contacts", contactRoutes);
 
 if (process.env.NODE_ENV !== "production") {
     const PORT = process.env.PORT || 3000;
