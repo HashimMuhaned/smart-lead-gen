@@ -1,6 +1,5 @@
 const pool = require("../db");
 const axios = require("axios");
-const { processEnrichmentBatch } = require("../services/enrichmentService");
 
 // Put your enrichment webhook URL here (save to .env later as N8N_ENRICHMENT_WEBHOOK_URL)
 const N8N_ENRICHMENT_WEBHOOK =

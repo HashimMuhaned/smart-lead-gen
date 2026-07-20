@@ -3,11 +3,9 @@ const router = express.Router();
 const {
   insertBusinesses,
   getBusinessById,
-  insertBulkContacts,
 } = require("../controllers/businessController");
 
 router.post("/bulk", insertBusinesses);
 router.get("/:id", getBusinessById);
-router.post("/:id/contacts/bulk", insertBulkContacts);
 
 module.exports = router;
