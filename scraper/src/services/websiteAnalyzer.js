@@ -58,7 +58,7 @@ async function crawlWebsite(websiteUrl) {
 
 /**
  * 2. LLM Analysis & Opportunity Detection + Email Generation
- * Model: gemini-1.5-flash (Fast, Low Token Consumption, Native JSON)
+ * Model: gemini-1.5-flash (Fixed Payload Architecture)
  */
 async function analyzeAndGenerateEmail({ business, contact, scrapedData }) {
   if (!GEMINI_API_KEY) {
@@ -90,21 +90,30 @@ OUTPUT JSON ONLY:
   "emailBody": "Personalized, concise outreach email referencing real business details"
 }`;
 
-  // FIXED: Changed model string from gemini-2.5-flash to gemini-1.5-flash
-  const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // Using the completely stable production endpoint for gemini-1.5-flash
+  const geminiEndpoint = `https://googleapis.com{GEMINI_API_KEY}`;
 
-  const response = await axios.post(geminiEndpoint, {
-    contents: [
-      {
-        parts: [{ text: prompt }],
+  // FIXED: Adjusted payload tree to make generationConfig a top-level property beside contents
+  const response = await axios.post(
+    geminiEndpoint, 
+    {
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json", 
+        temperature: 0.2, 
+        maxOutputTokens: 800, 
       },
-    ],
-    generationConfig: {
-      responseMimeType: "application/json", // Enforces strict JSON output
-      temperature: 0.2, // Keeps output focused and predictable
-      maxOutputTokens: 800, // Hard ceiling on completion tokens
     },
-  });
+    {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }
+  );
 
   const rawJsonText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
