@@ -75,7 +75,7 @@ export default function BusinessDetails() {
           </p>
 
           <Link
-            to="/businesses"
+            to="/"
             className="text-signal-600 font-semibold text-[13px]"
           >
             Back to Businesses
@@ -88,7 +88,7 @@ export default function BusinessDetails() {
   return (
     <AppLayout title="Business Profile">
       <button
-        onClick={() => navigate("/businesses")}
+        onClick={() => navigate("/")}
         className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-500 hover:text-ink-900-solid mb-5"
       >
         <ArrowLeft className="w-3.5 h-3.5" />

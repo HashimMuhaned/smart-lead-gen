@@ -23,7 +23,7 @@ const filterOptions = [
 export default function LeadDiscovery() {
   const [industry, setIndustry] = useState(industries[0]);
   const [location, setLocation] = useState("Dubai, UAE");
-  const [numLeads, setNumLeads] = useState(20); // Default to a smaller test limit
+  const [numLeads, setNumLeads] = useState(5); // Default to a smaller test limit
   const [activeFilters, setActiveFilters] = useState<string[]>(["hasWebsite"]);
   const [searching, setSearching] = useState(false);
   const [justSearched, setJustSearched] = useState(false);
