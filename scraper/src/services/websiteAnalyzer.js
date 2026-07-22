@@ -58,7 +58,7 @@ async function crawlWebsite(websiteUrl) {
 
 /**
  * 2. LLM Analysis & Opportunity Detection + Email Generation
- * Model: gemini-2.5-flash (Fast, Low Token Consumption, Native JSON)
+ * Model: gemini-1.5-flash (Fast, Low Token Consumption, Native JSON)
  */
 async function analyzeAndGenerateEmail({ business, contact, scrapedData }) {
   if (!GEMINI_API_KEY) {
@@ -90,7 +90,8 @@ OUTPUT JSON ONLY:
   "emailBody": "Personalized, concise outreach email referencing real business details"
 }`;
 
-  const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // FIXED: Changed model string from gemini-2.5-flash to gemini-1.5-flash
+  const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const response = await axios.post(geminiEndpoint, {
     contents: [
