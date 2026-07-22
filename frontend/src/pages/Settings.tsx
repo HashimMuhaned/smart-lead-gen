@@ -26,7 +26,7 @@ export default function Settings() {
     <AppLayout title="Settings" subtitle="Manage your account, business and integrations">
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-[var(--radius-card)] card-hairline p-2">
+          <div className="bg-white rounded-card card-hairline p-2">
             {tabs.map((t) => {
               const Icon = t.icon;
               return (
@@ -38,7 +38,7 @@ export default function Settings() {
                     active === t.id ? "bg-signal-100 text-signal-600" : "text-ink-600 hover:bg-paper-50"
                   )}
                 >
-                  <Icon className="w-[16px] h-[16px]" /> {t.label}
+                  <Icon className="w-4 h-4" /> {t.label}
                 </button>
               );
             })}
@@ -47,7 +47,7 @@ export default function Settings() {
 
         <div className="lg:col-span-3">
           {active === "profile" && (
-            <div className="bg-white rounded-[var(--radius-card)] card-hairline p-6">
+            <div className="bg-white rounded-card card-hairline p-6">
               <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-5">Profile</h3>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 rounded-full signal-gradient flex items-center justify-center text-white text-[18px] font-semibold">
@@ -70,7 +70,7 @@ export default function Settings() {
           )}
 
           {active === "business" && (
-            <div className="bg-white rounded-[var(--radius-card)] card-hairline p-6">
+            <div className="bg-white rounded-card card-hairline p-6">
               <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-5">Business Info</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Company name" defaultValue="LeadAI Studio" />
@@ -85,7 +85,7 @@ export default function Settings() {
           )}
 
           {active === "notifications" && (
-            <div className="bg-white rounded-[var(--radius-card)] card-hairline p-6">
+            <div className="bg-white rounded-card card-hairline p-6">
               <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-5">Notifications</h3>
               <div className="space-y-4">
                 {["New reply received", "Meeting booked", "Lead search completed", "Weekly performance digest"].map(
@@ -101,7 +101,7 @@ export default function Settings() {
           )}
 
           {active === "integrations" && (
-            <div className="bg-white rounded-[var(--radius-card)] card-hairline p-6">
+            <div className="bg-white rounded-card card-hairline p-6">
               <h3 className="font-display text-[15px] font-semibold text-ink-900-solid mb-1">Integrations</h3>
               <p className="text-[12.5px] text-ink-500 mb-5">
                 Frontend is mock-only for now — these connect once the backend, database and n8n workflows are wired up.

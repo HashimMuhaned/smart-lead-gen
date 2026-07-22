@@ -19,7 +19,7 @@ export default function AIAnalysis() {
   return (
     <AppLayout title="AI Analysis" subtitle="Website audits and opportunity scoring for every lead">
       <div className="grid lg:grid-cols-3 gap-5 mb-6">
-        <div className="bg-white rounded-[var(--radius-card)] card-hairline p-5 flex items-center gap-4">
+        <div className="bg-white rounded-card card-hairline p-5 flex items-center gap-4">
           <div className="w-11 h-11 rounded-xl bg-signal-100 text-signal-600 flex items-center justify-center shrink-0">
             <BrainCircuit className="w-5 h-5" />
           </div>
@@ -28,14 +28,14 @@ export default function AIAnalysis() {
             <p className="text-[12.5px] text-ink-500">Websites analyzed</p>
           </div>
         </div>
-        <div className="bg-white rounded-[var(--radius-card)] card-hairline p-5 flex items-center gap-4">
+        <div className="bg-white rounded-card card-hairline p-5 flex items-center gap-4">
           <ScoreRing score={avgScore} size={44} />
           <div>
             <p className="text-[13px] font-semibold text-ink-900-solid">Average AI Score</p>
             <p className="text-[12.5px] text-ink-500">Across all analyzed leads</p>
           </div>
         </div>
-        <div className="bg-white rounded-[var(--radius-card)] card-hairline p-5">
+        <div className="bg-white rounded-card card-hairline p-5">
           <p className="text-[13px] font-semibold text-ink-900-solid mb-2 flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-coral-500" /> Most common problems
           </p>

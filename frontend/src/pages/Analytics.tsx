@@ -86,7 +86,7 @@ export default function Analytics() {
         </ChartCard>
 
         <ChartCard title="Key Rates" subtitle="Snapshot across all campaigns">
-          <div className="grid grid-cols-2 gap-4 h-[240px] content-center">
+          <div className="grid grid-cols-2 gap-4 h-60 content-center">
             {[
               { label: "Open Rate", value: "34.9%", color: "text-signal-600" },
               { label: "Reply Rate", value: "6.8%", color: "text-mint-500" },

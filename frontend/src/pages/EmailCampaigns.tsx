@@ -17,7 +17,7 @@ export default function EmailCampaigns() {
         {campaigns.map((c) => {
           const openRate = c.sent ? Math.round((c.opened / c.sent) * 100) : 0;
           return (
-            <div key={c.id} className="bg-white rounded-[var(--radius-card)] card-hairline p-5">
+            <div key={c.id} className="bg-white rounded-card card-hairline p-5">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <h3 className="font-display text-[15px] font-semibold text-ink-900-solid">{c.name}</h3>

@@ -9,7 +9,6 @@ const SCRAPER_SERVICE_URL =
   process.env.SCRAPER_SERVICE_URL ||
   "https://scrape-service.n8nselfhostedautomations.tech";
 
-
 exports.insertBusinesses = async (req, res) => {
   const { jobId, campaignId, businesses } = req.body;
 
@@ -197,7 +196,9 @@ exports.getBusinessProfile = async (req, res) => {
 
     const result = await pool.query(query, [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Business not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Business not found" });
     }
 
     const row = result.rows[0];
@@ -213,9 +214,12 @@ exports.getBusinessProfile = async (req, res) => {
       email: row.contact_email || "No email found",
       rating: row.google_rating,
       reviews: row.review_count || 0,
-      contactPerson: row.first_name ? `${row.first_name} ${row.last_name || ''}`.trim() : "Business Owner",
+      contactPerson: row.first_name
+        ? `${row.first_name} ${row.last_name || ""}`.trim()
+        : "Business Owner",
       aiScore: row.ai_score || 75,
-      status: row.workflow_status === "enriched" ? "Hot Lead" : row.workflow_status,
+      status:
+        row.workflow_status === "enriched" ? "Hot Lead" : row.workflow_status,
       logoInitials: row.logo_initials || row.name.substring(0, 2).toUpperCase(),
       logoColor: row.logo_color || "signal",
       employeeCount: "1-10",
@@ -224,7 +228,7 @@ exports.getBusinessProfile = async (req, res) => {
       emailSubject: row.email_subject || "Partnership Opportunity",
       emailBody: row.email_body || "Generating email...",
       source: row.source || "Google Maps",
-      addedAt: new Date(row.created_at).toISOString().split("T")[0]
+      addedAt: new Date(row.created_at).toISOString().split("T")[0],
     };
 
     res.json({ success: true, business: profile });
@@ -253,8 +257,8 @@ exports.saveAnalysisResults = async (req, res) => {
     await client.query("BEGIN");
 
     // 1. Insert or Update website_analysis
-    const logoInitials = req.body.businessName 
-      ? req.body.businessName.substring(0, 2).toUpperCase() 
+    const logoInitials = req.body.businessName
+      ? req.body.businessName.substring(0, 2).toUpperCase()
       : "BI";
 
     await client.query(
@@ -269,8 +273,8 @@ exports.saveAnalysisResults = async (req, res) => {
         JSON.stringify(analysis.detectedProblems || []),
         JSON.stringify(analysis.recommendedServices || []),
         analysis.aiScore || 75,
-        logoInitials
-      ]
+        logoInitials,
+      ],
     );
 
     // 2. Insert into lead_scores
@@ -282,8 +286,8 @@ exports.saveAnalysisResults = async (req, res) => {
       [
         businessId,
         analysis.aiScore || 75,
-        JSON.stringify(analysis.detectedProblems || [])
-      ]
+        JSON.stringify(analysis.detectedProblems || []),
+      ],
     );
 
     // 3. Draft Email in emails table (Pending Human Approval)
@@ -297,8 +301,8 @@ exports.saveAnalysisResults = async (req, res) => {
         businessId,
         contactId || null,
         analysis.emailSubject || "Partnership Opportunity",
-        analysis.emailBody || ""
-      ]
+        analysis.emailBody || "",
+      ],
     );
 
     // 4. Update Business Status
@@ -308,12 +312,15 @@ exports.saveAnalysisResults = async (req, res) => {
       SET workflow_status = 'analyzed' 
       WHERE id = $1
       `,
-      [businessId]
+      [businessId],
     );
 
     await client.query("COMMIT");
 
-    res.json({ success: true, message: "Analysis and email stored successfully." });
+    res.json({
+      success: true,
+      message: "Analysis and email stored successfully.",
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Save Analysis Error:", err);
@@ -329,20 +336,25 @@ exports.saveAnalysisResults = async (req, res) => {
 exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
   try {
     // Fetch business details
-    const bizRes = await pool.query(`SELECT * FROM businesses WHERE id = $1`, [businessId]);
+    const bizRes = await pool.query(`SELECT * FROM businesses WHERE id = $1`, [
+      businessId,
+    ]);
     if (bizRes.rows.length === 0) return;
     const business = bizRes.rows[0];
 
     // Fetch contact details if available
     let contact = null;
     if (contactId) {
-      const contactRes = await pool.query(`SELECT * FROM contacts WHERE id = $1`, [contactId]);
+      const contactRes = await pool.query(
+        `SELECT * FROM contacts WHERE id = $1`,
+        [contactId],
+      );
       if (contactRes.rows.length > 0) contact = contactRes.rows[0];
     } else {
       // Grab top contact for this business if not specified
       const topContactRes = await pool.query(
         `SELECT * FROM contacts WHERE business_id = $1 ORDER BY confidence_score DESC LIMIT 1`,
-        [businessId]
+        [businessId],
       );
       if (topContactRes.rows.length > 0) contact = topContactRes.rows[0];
     }
@@ -354,7 +366,11 @@ exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
       VALUES ($1, $2, 'website_analysis', 'queued', $3)
       RETURNING id
       `,
-      [business.campaign_id, businessId, JSON.stringify({ businessId, contactId })]
+      [
+        business.campaign_id,
+        businessId,
+        JSON.stringify({ businessId, contactId }),
+      ],
     );
 
     const jobId = jobResult.rows[0].id;
@@ -366,8 +382,293 @@ exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
       contact,
     });
 
-    console.log(`[Dispatch Analysis] Successfully queued Job ${jobId} for Business ${businessId}`);
+    console.log(
+      `[Dispatch Analysis] Successfully queued Job ${jobId} for Business ${businessId}`,
+    );
   } catch (err) {
-    console.error(`[Dispatch Analysis Error] Business ${businessId}:`, err.message);
+    console.error(
+      `[Dispatch Analysis Error] Business ${businessId}:`,
+      err.message,
+    );
+  }
+};
+
+exports.getBusinesses = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        b.id,
+        b.name,
+        COALESCE(b.category, 'General') AS category,
+        CONCAT_WS(', ', NULLIF(b.city, ''), NULLIF(b.country, '')) AS location,
+        b.website,
+        COALESCE(b.phone, 'N/A') AS phone,
+        b.google_rating AS rating,
+        COALESCE(b.review_count, 0) AS reviews,
+        COALESCE(b.source, 'Google Maps') AS source,
+        b.created_at,
+        b.workflow_status,
+        -- Contact Info
+        c.email AS contact_email,
+        CONCAT_WS(' ', NULLIF(c.first_name, ''), NULLIF(c.last_name, '')) AS contact_person_name,
+        -- Website Analysis
+        wa.ai_score,
+        wa.logo_initials,
+        wa.logo_color,
+        wa.detected_problems,
+        wa.recommendations,
+        -- Drafted Email
+        e.subject AS email_subject,
+        e.body AS email_body
+      FROM businesses b
+      LEFT JOIN LATERAL (
+        SELECT email, first_name, last_name 
+        FROM contacts 
+        WHERE business_id = b.id 
+        ORDER BY confidence_score DESC 
+        LIMIT 1
+      ) c ON TRUE
+      LEFT JOIN website_analysis wa ON wa.business_id = b.id
+      LEFT JOIN LATERAL (
+        SELECT subject, body 
+        FROM emails 
+        WHERE business_id = b.id 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      ) e ON TRUE
+      ORDER BY b.created_at DESC;
+    `;
+
+    const result = await pool.query(query);
+
+    // Color palette options matching frontend logo color styles
+    const logoColors = ["signal", "mint", "sky", "amber", "purple"];
+
+    const formattedBusinesses = result.rows.map((row, index) => {
+      // Map workflow_status to LeadStatus type
+      let status = "Discovered";
+      if (
+        row.workflow_status === "analyzed" ||
+        row.workflow_status === "enriched"
+      ) {
+        status = "Hot Lead";
+      } else if (row.workflow_status === "enriching") {
+        status = "Enriching";
+      }
+
+      // Format Date to YYYY-MM-DD
+      const addedAt = row.created_at
+        ? new Date(row.created_at).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
+      // Clean Initials (Fallback to first 2 letters of business name)
+      const cleanName = row.name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+      const initials = cleanName
+        ? cleanName
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .substring(0, 2)
+            .toUpperCase()
+        : "BI";
+
+      return {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        location: row.location || "Dubai, UAE",
+        website: row.website || null,
+        phone: row.phone,
+        email: row.contact_email || null,
+        rating: row.rating ? parseFloat(row.rating) : 0.0,
+        reviews: row.reviews ? parseInt(row.reviews, 10) : 0,
+        contactPerson: row.contact_person_name?.trim() || "Business Owner",
+        aiScore: row.ai_score ? parseInt(row.ai_score, 10) : 75,
+        status: status,
+        logoInitials: row.logo_initials || initials,
+        logoColor: row.logo_color || logoColors[index % logoColors.length],
+        employeeCount: "1-10",
+        detectedProblems: row.detected_problems || [],
+        recommendedServices: row.recommendations || [],
+        emailSubject: row.email_subject || "Partnership Opportunity",
+        emailBody: row.email_body || "",
+        source: row.source === "google_maps" ? "Google Maps" : row.source,
+        addedAt: addedAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      businesses: formattedBusinesses,
+    });
+  } catch (err) {
+    console.error("Fetch Businesses Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.getBusinessDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const query = `
+      SELECT
+
+        b.id,
+        b.name,
+        b.category,
+
+        CONCAT_WS(', ',
+          NULLIF(b.city, ''),
+          NULLIF(b.country, '')
+        ) AS location,
+
+        b.website,
+        b.phone,
+
+        b.google_rating,
+        b.review_count,
+
+        b.source,
+        b.created_at,
+        b.workflow_status,
+
+
+        -- Contact
+        c.email,
+        CONCAT_WS(' ',
+          NULLIF(c.first_name,''),
+          NULLIF(c.last_name,'')
+        ) AS contact_person,
+
+
+        -- Website AI Analysis
+        wa.ai_score,
+        wa.logo_initials,
+        wa.logo_color,
+        wa.detected_problems,
+        wa.recommendations,
+
+
+        -- Latest Email
+        e.subject,
+        e.body
+
+
+      FROM businesses b
+
+
+      LEFT JOIN LATERAL (
+
+        SELECT *
+        FROM contacts
+        WHERE business_id = b.id
+        ORDER BY confidence_score DESC
+        LIMIT 1
+
+      ) c ON TRUE
+
+
+
+      LEFT JOIN website_analysis wa
+      ON wa.business_id = b.id
+
+
+
+      LEFT JOIN LATERAL (
+
+        SELECT *
+        FROM emails
+        WHERE business_id = b.id
+        ORDER BY created_at DESC
+        LIMIT 1
+
+      ) e ON TRUE
+
+
+
+      WHERE b.id = $1
+
+      LIMIT 1;
+    `;
+
+    const result = await pool.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Business not found",
+      });
+    }
+
+    const row = result.rows[0];
+
+    const cleanName = row.name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+
+    const initials = cleanName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
+
+    const business = {
+      id: row.id,
+
+      name: row.name,
+
+      category: row.category || "General",
+
+      location: row.location || "Dubai, UAE",
+
+      website: row.website || null,
+
+      phone: row.phone || "N/A",
+
+      email: row.email || null,
+
+      rating: Number(row.google_rating || 0),
+
+      reviews: Number(row.review_count || 0),
+
+      contactPerson: row.contact_person || "Business Owner",
+
+      aiScore: row.ai_score || 75,
+
+      status:
+        row.workflow_status === "analyzed" || row.workflow_status === "enriched"
+          ? "Hot Lead"
+          : "Discovered",
+
+      logoInitials: row.logo_initials || initials,
+
+      logoColor: row.logo_color || "signal",
+
+      employeeCount: "1-10",
+
+      detectedProblems: row.detected_problems || [],
+
+      recommendedServices: row.recommendations || [],
+
+      emailSubject: row.subject || "Partnership Opportunity",
+
+      emailBody: row.body || "",
+
+      source: row.source === "google_maps" ? "Google Maps" : row.source,
+
+      addedAt: new Date(row.created_at).toISOString().split("T")[0],
+    };
+
+    res.json({
+      success: true,
+      business,
+    });
+  } catch (error) {
+    console.error("Get Business Details Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
