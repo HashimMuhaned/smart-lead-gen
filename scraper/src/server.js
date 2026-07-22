@@ -5,6 +5,7 @@ const cors = require("cors");
 
 const googleMapsRoutes = require("./routes/googleMaps");
 const enrichmentRoutes = require("./routes/enrichment"); 
+const analysisRoutes = require("./routes/analysis");
 
 const app = express();
 
@@ -13,7 +14,8 @@ app.use(express.json());
 
 // routes
 app.use("/google-maps", googleMapsRoutes);
-app.use("/contact-enrichment", enrichmentRoutes); // Added
+app.use("/contact-enrichment", enrichmentRoutes);
+app.use("/website-analysis", analysisRoutes);
 
 const PORT = process.env.PORT || 4000;
 

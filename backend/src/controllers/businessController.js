@@ -177,3 +177,197 @@ exports.getBusinessById = async (req, res) => {
   }
 };
 
+exports.getBusinessProfile = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const query = `
+      SELECT 
+        b.*,
+        c.first_name, c.last_name, c.job_title, c.email AS contact_email,
+        wa.detected_problems, wa.recommendations, wa.ai_score, wa.logo_initials, wa.logo_color,
+        e.subject AS email_subject, e.body AS email_body, e.status AS email_status
+      FROM businesses b
+      LEFT JOIN contacts c ON c.business_id = b.id
+      LEFT JOIN website_analysis wa ON wa.business_id = b.id
+      LEFT JOIN emails e ON e.business_id = b.id
+      WHERE b.id = $1
+      LIMIT 1;
+    `;
+
+    const result = await pool.query(query, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Business not found" });
+    }
+
+    const row = result.rows[0];
+
+    // Format directly to match React Frontend Expectations
+    const profile = {
+      id: row.id,
+      name: row.name,
+      category: row.category || "Business",
+      location: [row.city, row.country].filter(Boolean).join(", "),
+      website: row.website,
+      phone: row.phone,
+      email: row.contact_email || "No email found",
+      rating: row.google_rating,
+      reviews: row.review_count || 0,
+      contactPerson: row.first_name ? `${row.first_name} ${row.last_name || ''}`.trim() : "Business Owner",
+      aiScore: row.ai_score || 75,
+      status: row.workflow_status === "enriched" ? "Hot Lead" : row.workflow_status,
+      logoInitials: row.logo_initials || row.name.substring(0, 2).toUpperCase(),
+      logoColor: row.logo_color || "signal",
+      employeeCount: "1-10",
+      detectedProblems: row.detected_problems || [],
+      recommendedServices: row.recommendations || [],
+      emailSubject: row.email_subject || "Partnership Opportunity",
+      emailBody: row.email_body || "Generating email...",
+      source: row.source || "Google Maps",
+      addedAt: new Date(row.created_at).toISOString().split("T")[0]
+    };
+
+    res.json({ success: true, business: profile });
+  } catch (err) {
+    console.error("Fetch Business Details Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Saves AI Analysis & Email Drafts returned from Scraper Server
+ */
+exports.saveAnalysisResults = async (req, res) => {
+  const { jobId, businessId, campaignId, contactId, analysis } = req.body;
+
+  if (!businessId || !analysis) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing businessId or analysis payload.",
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Insert or Update website_analysis
+    const logoInitials = req.body.businessName 
+      ? req.body.businessName.substring(0, 2).toUpperCase() 
+      : "BI";
+
+    await client.query(
+      `
+      INSERT INTO website_analysis 
+        (business_id, analysis_status, detected_problems, recommendations, ai_score, logo_initials, logo_color)
+      VALUES ($1, 'completed', $2, $3, $4, $5, 'signal')
+      ON CONFLICT (id) DO NOTHING
+      `,
+      [
+        businessId,
+        JSON.stringify(analysis.detectedProblems || []),
+        JSON.stringify(analysis.recommendedServices || []),
+        analysis.aiScore || 75,
+        logoInitials
+      ]
+    );
+
+    // 2. Insert into lead_scores
+    await client.query(
+      `
+      INSERT INTO lead_scores (business_id, score, reasons)
+      VALUES ($1, $2, $3)
+      `,
+      [
+        businessId,
+        analysis.aiScore || 75,
+        JSON.stringify(analysis.detectedProblems || [])
+      ]
+    );
+
+    // 3. Draft Email in emails table (Pending Human Approval)
+    await client.query(
+      `
+      INSERT INTO emails (campaign_id, business_id, contact_id, subject, body, status)
+      VALUES ($1, $2, $3, $4, $5, 'draft')
+      `,
+      [
+        campaignId,
+        businessId,
+        contactId || null,
+        analysis.emailSubject || "Partnership Opportunity",
+        analysis.emailBody || ""
+      ]
+    );
+
+    // 4. Update Business Status
+    await client.query(
+      `
+      UPDATE businesses 
+      SET workflow_status = 'analyzed' 
+      WHERE id = $1
+      `,
+      [businessId]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ success: true, message: "Analysis and email stored successfully." });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Save Analysis Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Dispatcher function to send a business + contact to Scraper Server for analysis
+ */
+exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
+  try {
+    // Fetch business details
+    const bizRes = await pool.query(`SELECT * FROM businesses WHERE id = $1`, [businessId]);
+    if (bizRes.rows.length === 0) return;
+    const business = bizRes.rows[0];
+
+    // Fetch contact details if available
+    let contact = null;
+    if (contactId) {
+      const contactRes = await pool.query(`SELECT * FROM contacts WHERE id = $1`, [contactId]);
+      if (contactRes.rows.length > 0) contact = contactRes.rows[0];
+    } else {
+      // Grab top contact for this business if not specified
+      const topContactRes = await pool.query(
+        `SELECT * FROM contacts WHERE business_id = $1 ORDER BY confidence_score DESC LIMIT 1`,
+        [businessId]
+      );
+      if (topContactRes.rows.length > 0) contact = topContactRes.rows[0];
+    }
+
+    // Create automation job record
+    const jobResult = await pool.query(
+      `
+      INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
+      VALUES ($1, $2, 'website_analysis', 'queued', $3)
+      RETURNING id
+      `,
+      [business.campaign_id, businessId, JSON.stringify({ businessId, contactId })]
+    );
+
+    const jobId = jobResult.rows[0].id;
+
+    // Trigger Scraper Server asynchronously
+    await axios.post(`${SCRAPER_SERVICE_URL}/website-analysis`, {
+      jobId,
+      business,
+      contact,
+    });
+
+    console.log(`[Dispatch Analysis] Successfully queued Job ${jobId} for Business ${businessId}`);
+  } catch (err) {
+    console.error(`[Dispatch Analysis Error] Business ${businessId}:`, err.message);
+  }
+};

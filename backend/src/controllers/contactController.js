@@ -1,4 +1,5 @@
 const pool = require("../db");
+const { dispatchWebsiteAnalysis } = require("./businessController");
 
 exports.insertContactsBulk = async (req, res) => {
   const { businessId, contacts } = req.body;
@@ -52,6 +53,8 @@ exports.insertContactsBulk = async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    dispatchWebsiteAnalysis(businessId);
 
     res.json({
       success: true,
