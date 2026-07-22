@@ -13,14 +13,14 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutGrid },
+  { to: "/", label: "Businesses", icon: LayoutGrid },
   { to: "/discovery", label: "Lead Discovery", icon: Radar },
-  { to: "/businesses", label: "Businesses", icon: Building2 },
-  { to: "/analysis", label: "AI Analysis", icon: BrainCircuit },
-  { to: "/campaigns", label: "Email Campaigns", icon: Mail },
-  { to: "/templates", label: "Templates", icon: FileText },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/settings", label: "Settings", icon: Settings },
+  // { to: "/businesses", label: "Businesses", icon: Building2 },
+  // { to: "/analysis", label: "AI Analysis", icon: BrainCircuit },
+  // { to: "/campaigns", label: "Email Campaigns", icon: Mail },
+  // { to: "/templates", label: "Templates", icon: FileText },
+  // { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  // { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {

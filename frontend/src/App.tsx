@@ -13,15 +13,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Businesses />} />
         <Route path="/discovery" element={<LeadDiscovery />} />
-        <Route path="/businesses" element={<Businesses />} />
+        {/* <Route path="/businesses" element={<Businesses />} /> */}
         <Route path="/businesses/:id" element={<BusinessDetails />} />
-        <Route path="/analysis" element={<AIAnalysis />} />
-        <Route path="/campaigns" element={<EmailCampaigns />} />
-        <Route path="/templates" element={<Templates />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/settings" element={<Settings />} />
+        {/* <Route path="/analysis" element={<AIAnalysis />} /> */}
+        {/* <Route path="/campaigns" element={<EmailCampaigns />} /> */}
+        {/* <Route path="/templates" element={<Templates />} /> */}
+        {/* <Route path="/analytics" element={<Analytics />} /> */}
+        {/* <Route path="/settings" element={<Settings />} /> */}
       </Routes>
     </BrowserRouter>
   );
