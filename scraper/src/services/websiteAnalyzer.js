@@ -1,8 +1,12 @@
 const axios = require("axios");
+// Import the official Google Gen AI SDK
+const { GoogleGenAI } = require("@google/genai");
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
 const SKYVERN_API_KEY = process.env.SKYVERN_API_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Initialize the official client
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 /**
  * 1. Crawl Website (Hybrid Approach)
@@ -10,7 +14,6 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 async function crawlWebsite(websiteUrl) {
   if (!websiteUrl) return null;
 
-  // Primary Attempt: Firecrawl (Fast, Clean LLM Markdown)
   try {
     const firecrawlRes = await axios.post(
       "https://api.firecrawl.dev/v1/scrape",
@@ -33,7 +36,6 @@ async function crawlWebsite(websiteUrl) {
     console.warn(`[Firecrawl] Failed for ${websiteUrl}, falling back to Skyvern:`, err.message);
   }
 
-  // Fallback Attempt: Skyvern (Agentic Browser Execution)
   try {
     const skyvernRes = await axios.post(
       "https://api.skyvern.com/api/v1/jobs",
@@ -58,14 +60,13 @@ async function crawlWebsite(websiteUrl) {
 
 /**
  * 2. LLM Analysis & Opportunity Detection + Email Generation
- * Model: gemini-1.5-flash (Fixed Payload Architecture)
+ * Model: gemini-2.5-flash (Official SDK Implementation)
  */
 async function analyzeAndGenerateEmail({ business, contact, scrapedData }) {
-  if (!GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in environment variables.");
   }
 
-  // Trim scraped markdown to 1500 chars to minimize prompt input tokens
   const cleanMarkdown = scrapedData?.markdown
     ? scrapedData.markdown.substring(0, 1500).replace(/\s+/g, " ")
     : "No website content.";
@@ -74,7 +75,6 @@ async function analyzeAndGenerateEmail({ business, contact, scrapedData }) {
     ? `${contact.first_name || ""} ${contact.last_name || ""}`.trim()
     : "Business Owner";
 
-  // Highly concise prompt optimized for low token overhead
   const prompt = `Analyze this lead and write a cold outreach email focusing on CRM, automations, or web redesign.
 
 BUSINESS: ${business.name} | Category: ${business.category || "N/A"} | Rating: ${business.google_rating || "N/A"} (${business.review_count || 0} reviews) | Location: ${business.city || ""}, ${business.country || ""}
@@ -90,32 +90,18 @@ OUTPUT JSON ONLY:
   "emailBody": "Personalized, concise outreach email referencing real business details"
 }`;
 
-  // Using the completely stable production endpoint for gemini-1.5-flash
-  const geminiEndpoint = `https://googleapis.com{GEMINI_API_KEY}`;
-
-  // FIXED: Adjusted payload tree to make generationConfig a top-level property beside contents
-  const response = await axios.post(
-    geminiEndpoint, 
-    {
-      contents: [
-        {
-          parts: [{ text: prompt }],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json", 
-        temperature: 0.2, 
-        maxOutputTokens: 800, 
-      },
+  // Use ai.models.generateContent with official parameters
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash", // Upgraded to latest fast model
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+      maxOutputTokens: 800,
     },
-    {
-      headers: {
-        "Content-Type": "application/json"
-      }
-    }
-  );
+  });
 
-  const rawJsonText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const rawJsonText = response.text;
 
   if (!rawJsonText) {
     throw new Error("Gemini returned an empty response.");
