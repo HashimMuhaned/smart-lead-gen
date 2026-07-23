@@ -317,6 +317,18 @@ exports.saveAnalysisResults = async (req, res) => {
 
     await client.query("COMMIT");
 
+    const remainingJobs = await client.query(
+      `SELECT COUNT(*)::int FROM automation_jobs WHERE campaign_id = $1 AND status IN ('queued', 'running')`,
+      [campaignId],
+    );
+
+    if (parseInt(remainingJobs.rows[0].count, 10) === 0) {
+      await client.query(
+        `UPDATE campaigns SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+        [campaignId],
+      );
+    }
+
     res.json({
       success: true,
       message: "Analysis and email stored successfully.",

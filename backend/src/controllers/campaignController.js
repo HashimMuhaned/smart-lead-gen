@@ -151,10 +151,10 @@ exports.failJob = async (req, res) => {
 };
 
 // Add this method to backend/src/controllers/campaignController.js
+// backend/controllers/campaignController.js
+
 exports.getCampaigns = async (req, res) => {
   try {
-    // We fetch campaigns, aggregate their scraped businesses count, 
-    // and grab the corresponding scraping automation job's status.
     const result = await pool.query(`
       SELECT 
         c.id,
@@ -163,33 +163,57 @@ exports.getCampaigns = async (req, res) => {
         c.target_location AS "location",
         c.created_at AS "startedAt",
         c.status AS "campaignStatus",
-        COALESCE(j.status, 'queued') AS "jobStatus",
+        -- Scraping job status
+        j.status AS "scrapingJobStatus",
         j.input->>'maxLeads' AS "maxLeads",
+        -- Total businesses scraped
         (
           SELECT COUNT(*)::int 
           FROM businesses b 
           WHERE b.campaign_id = c.id
-        ) AS "leadsFound"
+        ) AS "leadsFound",
+        -- Count active (queued/running) downstream jobs across the whole pipeline
+        (
+          SELECT COUNT(*)::int 
+          FROM automation_jobs aj 
+          WHERE aj.campaign_id = c.id 
+            AND aj.status IN ('queued', 'running')
+        ) AS "activeJobsCount",
+        -- Count failed jobs to flag failures
+        (
+          SELECT COUNT(*)::int 
+          FROM automation_jobs aj 
+          WHERE aj.campaign_id = c.id 
+            AND aj.status = 'failed'
+        ) AS "failedJobsCount"
       FROM campaigns c
       LEFT JOIN automation_jobs j 
         ON j.campaign_id = c.id AND j.job_type = 'scraping'
       ORDER BY c.created_at DESC
     `);
 
-    // Map database structures directly to the camelCase properties the frontend layout relies on
     const campaigns = result.rows.map(row => {
-      // Formats the timestamp to 'YYYY-MM-DD HH:mm'
       const date = new Date(row.startedAt);
       const formattedDate = date.toISOString().replace('T', ' ').substring(0, 16);
 
-      // Determine a singular consolidated UI status
+      // Determine accurate consolidated UI status
       let status = "Completed";
-      if (row.jobStatus === "running") status = "Processing";
-      else if (row.jobStatus === "failed") status = "Failed";
-      else if (row.jobStatus === "queued") status = "Queued";
 
-      // Reconstruct the filters array dynamically based on options they selected
-      const filters = ["Has Website"]; // Default baseline
+      if (row.scrapingJobStatus === "failed") {
+        status = "Failed";
+      } else if (
+        row.activeJobsCount > 0 || 
+        row.campaignStatus === "searching" || 
+        row.campaignStatus === "enriching" ||
+        row.scrapingJobStatus === "running"
+      ) {
+        status = "Processing";
+      } else if (row.scrapingJobStatus === "queued") {
+        status = "Queued";
+      }
+
+      // Reconstruct the filters array
+      const filters = ["Has Website"];
       if (row.maxLeads) {
         filters.push(`Max Leads: ${row.maxLeads}`);
       }
