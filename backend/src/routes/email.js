@@ -3,6 +3,6 @@ const router = express.Router();
 
 const { updateEmail } = require("../controllers/emailController");
 
-router.put("/emails/:id", updateEmail);
+router.put("/update/:id", updateEmail);
 
 module.exports = router;

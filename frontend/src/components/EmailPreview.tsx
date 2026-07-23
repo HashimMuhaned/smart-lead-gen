@@ -47,7 +47,7 @@ export function EmailPreview({
 
     try {
       const response = await fetch(
-        `https://smart-lead-gen-backend.vercel.app/api/emails/${emailId}`,
+        `https://smart-lead-gen-backend.vercel.app/api/emails/update/${emailId}`,
         {
           method: "PUT",
           headers: {
