@@ -532,7 +532,6 @@ exports.getBusinessDetails = async (req, res) => {
 
     const query = `
       SELECT
-
         b.id,
         b.name,
         b.category,
@@ -544,22 +543,32 @@ exports.getBusinessDetails = async (req, res) => {
 
         b.website,
         b.phone,
-
         b.google_rating,
         b.review_count,
-
         b.source,
         b.created_at,
         b.workflow_status,
 
-
-        -- Contact
-        c.email,
-        CONCAT_WS(' ',
-          NULLIF(c.first_name,''),
-          NULLIF(c.last_name,'')
-        ) AS contact_person,
-
+        -- Aggregated contacts list sorted by confidence score
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', c.id,
+                'firstName', c.first_name,
+                'lastName', c.last_name,
+                'jobTitle', c.job_title,
+                'email', c.email,
+                'phone', c.phone,
+                'confidenceScore', c.confidence_score
+              )
+              ORDER BY c.confidence_score DESC NULLS LAST, c.created_at DESC
+            )
+            FROM contacts c
+            WHERE c.business_id = b.id
+          ),
+          '[]'::json
+        ) AS contacts,
 
         -- Website AI Analysis
         wa.ai_score,
@@ -568,46 +577,24 @@ exports.getBusinessDetails = async (req, res) => {
         wa.detected_problems,
         wa.recommendations,
 
-
         -- Latest Email
         e.subject,
         e.body
 
-
       FROM businesses b
 
-
-      LEFT JOIN LATERAL (
-
-        SELECT *
-        FROM contacts
-        WHERE business_id = b.id
-        ORDER BY confidence_score DESC
-        LIMIT 1
-
-      ) c ON TRUE
-
-
-
       LEFT JOIN website_analysis wa
-      ON wa.business_id = b.id
-
-
+        ON wa.business_id = b.id
 
       LEFT JOIN LATERAL (
-
-        SELECT *
+        SELECT subject, body
         FROM emails
         WHERE business_id = b.id
         ORDER BY created_at DESC
         LIMIT 1
-
       ) e ON TRUE
 
-
-
       WHERE b.id = $1
-
       LIMIT 1;
     `;
 
@@ -623,7 +610,6 @@ exports.getBusinessDetails = async (req, res) => {
     const row = result.rows[0];
 
     const cleanName = row.name.replace(/[^a-zA-Z0-9 ]/g, "").trim();
-
     const initials = cleanName
       .split(" ")
       .map((n) => n[0])
@@ -631,50 +617,47 @@ exports.getBusinessDetails = async (req, res) => {
       .substring(0, 2)
       .toUpperCase();
 
+    // Secondary format: Map contacts with fallback fullName property
+    const contacts = (row.contacts || []).map((c) => ({
+      id: c.id,
+      firstName: c.firstName || "",
+      lastName: c.lastName || "",
+      fullName:
+        [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed Contact",
+      jobTitle: c.jobTitle || "N/A",
+      email: c.email || null,
+      phone: c.phone || null,
+      confidenceScore: c.confidenceScore || 0,
+    }));
+
+    // Primary contact display name for fallback UI fields
+    const primaryContactName =
+      contacts.length > 0 ? contacts[0].fullName : "Business Owner";
+
     const business = {
       id: row.id,
-
       name: row.name,
-
       category: row.category || "General",
-
       location: row.location || "Dubai, UAE",
-
       website: row.website || null,
-
       phone: row.phone || "N/A",
-
-      email: row.email || null,
-
+      contacts: contacts,
+      contactPerson: primaryContactName,
       rating: Number(row.google_rating || 0),
-
       reviews: Number(row.review_count || 0),
-
-      contactPerson: row.contact_person || "Business Owner",
-
       aiScore: row.ai_score || 75,
-
       status:
         row.workflow_status === "analyzed" || row.workflow_status === "enriched"
           ? "Hot Lead"
           : "Discovered",
-
       logoInitials: row.logo_initials || initials,
-
       logoColor: row.logo_color || "signal",
-
-      employeeCount: "1-10",
-
+      employeeCount: `${contacts.length || 1}-${Math.max(10, contacts.length)}`,
       detectedProblems: row.detected_problems || [],
-
       recommendedServices: row.recommendations || [],
-
       emailSubject: row.subject || "Partnership Opportunity",
-
       emailBody: row.body || "",
-
       source: row.source === "google_maps" ? "Google Maps" : row.source,
-
       addedAt: new Date(row.created_at).toISOString().split("T")[0],
     };
 

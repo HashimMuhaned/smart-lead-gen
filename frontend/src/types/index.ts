@@ -6,19 +6,31 @@ export type LeadStatus =
   | "Replied"
   | "Booked";
 
+export interface Contact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  jobTitle: string;
+  email: string | null;
+  phone: string | null;
+  confidenceScore?: number;
+}
+
 export interface Business {
+  email: import("react").JSX.Element;
   id: string;
   name: string;
   category: string;
   location: string;
   website: string | null;
   phone: string;
-  email: string | null;
+  contacts: Contact[];
+  contactPerson: string;
   rating: number;
   reviews: number;
-  contactPerson: string;
   aiScore: number;
-  status: LeadStatus;
+  status: string;
   logoInitials: string;
   logoColor: string;
   employeeCount: string;
@@ -26,7 +38,7 @@ export interface Business {
   recommendedServices: string[];
   emailSubject: string;
   emailBody: string;
-  source: "Google Maps" | "Apollo" | "Manual";
+  source: string;
   addedAt: string;
 }
 
