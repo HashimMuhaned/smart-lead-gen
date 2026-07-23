@@ -72,10 +72,12 @@ Please output a JSON object strictly matching this schema:
   };
   try {
     const { id } = req.params;
-    const { customInstructions } = req.body;
 
-    // 1. Fetch existing email from your database (e.g., MongoDB, PostgreSQL)
-    const email = await Email.findById(id); // Adjust according to your ORM/Model
+    // Safely default req.body in case no payload is sent
+    const { customInstructions = "" } = req.body || {};
+
+    // 1. Fetch existing email
+    const email = await Email.findById(id);
     if (!email) {
       return res.status(404).json({ error: "Email not found" });
     }
@@ -97,18 +99,16 @@ Please output a JSON object strictly matching this schema:
       },
     });
 
-    // 4. Parse output text
     const generatedData = JSON.parse(response.text);
 
-    // 5. Update and save back to DB
+    // 4. Update & Save
     email.subject = generatedData.subject;
-    email.body = generatedData.body; // or email.content
+    email.body = generatedData.body;
     email.isAiRegenerated = true;
     email.updatedAt = new Date();
 
     await email.save();
 
-    // 6. Return response
     return res.status(200).json({
       message: "Email successfully regenerated and saved",
       data: email,
@@ -121,5 +121,4 @@ Please output a JSON object strictly matching this schema:
     });
   }
 };
-
 module.exports = { updateEmail, regenerateEmail };
