@@ -4,7 +4,7 @@ const { GoogleGenAI } = require("@google/genai");
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-exports.updateEmail = async (req, res) => {
+const updateEmail = async (req, res) => {
   try {
     const { id } = req.params;
     const { subject, body } = req.body;
