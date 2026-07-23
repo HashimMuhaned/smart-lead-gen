@@ -200,8 +200,8 @@ export default function BusinessDetails() {
 
                         {contact.jobTitle && (
                           <p className="flex items-start gap-1.5 text-[13px] text-ink-500 mt-1.5 leading-snug">
-                            <Briefcase className="w-3.5 h-3.5 text-ink-400 shrink-0 mt-[2px]" />
-                            <span className="break-words whitespace-normal">
+                            <Briefcase className="w-3.5 h-3.5 text-ink-400 shrink-0 mt-0.5" />
+                            <span className="wrap-break-word whitespace-normal">
                               {contact.jobTitle}
                             </span>
                           </p>
@@ -339,9 +339,21 @@ export default function BusinessDetails() {
         {/* Email Preview */}
         <div className="lg:col-span-2">
           <EmailPreview
+            emailId={business.emailId}
             subject={business.emailSubject}
             body={business.emailBody}
             recipientName={contacts?.[0]?.fullName || business.contactPerson}
+            onSaveSuccess={(newSubject, newBody) => {
+              setBusiness((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      emailSubject: newSubject,
+                      emailBody: newBody,
+                    }
+                  : null,
+              );
+            }}
           />
         </div>
       </div>

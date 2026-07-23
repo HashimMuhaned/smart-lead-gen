@@ -24,10 +24,10 @@ export interface Business {
   location: string;
   website: string | null;
   phone: string;
-  
+
   // Contacts list
   contacts?: Contact[];
-  
+
   // Legacy / optional direct contact fields
   email?: string | null;
   contactPerson?: string;
@@ -41,8 +41,12 @@ export interface Business {
   employeeCount: string;
   detectedProblems: string[];
   recommendedServices: string[];
+
+  // Email fields
+  emailId?: string | null; // 👈 Added optional emailId
   emailSubject: string;
   emailBody: string;
+
   source: string;
   addedAt: string;
 }

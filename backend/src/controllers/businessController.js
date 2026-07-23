@@ -577,7 +577,8 @@ exports.getBusinessDetails = async (req, res) => {
         wa.detected_problems,
         wa.recommendations,
 
-        -- Latest Email
+        -- Latest Email details
+        e.id AS email_id,
         e.subject,
         e.body
 
@@ -587,7 +588,7 @@ exports.getBusinessDetails = async (req, res) => {
         ON wa.business_id = b.id
 
       LEFT JOIN LATERAL (
-        SELECT subject, body
+        SELECT id, subject, body
         FROM emails
         WHERE business_id = b.id
         ORDER BY created_at DESC
@@ -655,6 +656,7 @@ exports.getBusinessDetails = async (req, res) => {
       employeeCount: `${contacts.length || 1}-${Math.max(10, contacts.length)}`,
       detectedProblems: row.detected_problems || [],
       recommendedServices: row.recommendations || [],
+      emailId: row.email_id || null, // 👈 Added emailId
       emailSubject: row.subject || "Partnership Opportunity",
       emailBody: row.body || "",
       source: row.source === "google_maps" ? "Google Maps" : row.source,
