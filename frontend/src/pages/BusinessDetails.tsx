@@ -10,7 +10,8 @@ import {
   MapPin,
   Users,
   Briefcase,
-  UserCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 import { AppLayout } from "@/layout/AppLayout";
@@ -20,8 +21,10 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreRing } from "@/components/ScoreRing";
 import { logoColorStyles } from "@/lib/utils";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Business } from "@/types";
+
+const CONTACTS_PREVIEW_COUNT = 4;
 
 export default function BusinessDetails() {
   const { id } = useParams();
@@ -30,6 +33,7 @@ export default function BusinessDetails() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showAllContacts, setShowAllContacts] = useState(false);
 
   useEffect(() => {
     async function fetchBusiness() {
@@ -56,6 +60,16 @@ export default function BusinessDetails() {
       fetchBusiness();
     }
   }, [id]);
+
+  const contacts = business?.contacts || [];
+
+  const visibleContacts = useMemo(() => {
+    return showAllContacts
+      ? contacts
+      : contacts.slice(0, CONTACTS_PREVIEW_COUNT);
+  }, [contacts, showAllContacts]);
+
+  const hiddenCount = contacts.length - CONTACTS_PREVIEW_COUNT;
 
   if (loading) {
     return (
@@ -113,8 +127,8 @@ export default function BusinessDetails() {
               </div>
 
               <p className="text-[13px] text-ink-500 mt-1">
-                {business.category} · {business?.contacts?.length || 0} Contact
-                {business?.contacts?.length === 1 ? "" : "s"}
+                {business.category} · {contacts.length} Contact
+                {contacts.length === 1 ? "" : "s"}
               </p>
 
               <p className="inline-flex items-center gap-1 text-[12.5px] text-ink-500 mt-1">
@@ -133,8 +147,113 @@ export default function BusinessDetails() {
         </div>
       </div>
 
+      {/* Key Contacts — full width, own row so long job titles have room */}
+      <div className="bg-white rounded-card card-hairline p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-[14.5px] font-semibold text-ink-900-solid flex items-center gap-2">
+            <Users className="w-4 h-4 text-signal-600" />
+            Key Contacts ({contacts.length})
+          </h3>
+
+          {contacts.length > CONTACTS_PREVIEW_COUNT && (
+            <button
+              onClick={() => setShowAllContacts((v) => !v)}
+              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-signal-600 hover:text-signal-700 transition-colors"
+            >
+              {showAllContacts ? (
+                <>
+                  Show less
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </>
+              ) : (
+                <>
+                  Show all {contacts.length}
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {contacts.length === 0 ? (
+          <p className="text-[13px] text-ink-400 italic">
+            No individual contacts found.
+          </p>
+        ) : (
+          <>
+            <div className="grid lg:grid-cols-2 gap-4">
+              {visibleContacts.map((contact, idx) => (
+                <div
+                  key={contact.id || idx}
+                  className="rounded-xl border border-paper-100 p-5 hover:border-paper-200 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-paper-100 text-ink-700 flex items-center justify-center font-semibold text-[13px] shrink-0">
+                        {contact.firstName?.[0] || contact.lastName?.[0] || "C"}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-[14.5px] font-medium text-ink-900-solid leading-tight">
+                          {contact.fullName}
+                        </p>
+
+                        {contact.jobTitle && (
+                          <p className="flex items-start gap-1.5 text-[13px] text-ink-500 mt-1.5 leading-snug">
+                            <Briefcase className="w-3.5 h-3.5 text-ink-400 shrink-0 mt-[2px]" />
+                            <span className="break-words whitespace-normal">
+                              {contact.jobTitle}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-paper-100 space-y-2 text-[13px]">
+                    {contact.email ? (
+                      <a
+                        href={`mailto:${contact.email}`}
+                        className="flex items-center gap-2 text-ink-600 hover:text-signal-600 transition-colors"
+                      >
+                        <Mail className="w-4 h-4 text-ink-400 shrink-0" />
+                        <span className="truncate">{contact.email}</span>
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 text-ink-400 italic">
+                        <Mail className="w-4 h-4 text-ink-300 shrink-0" />
+                        No email available
+                      </div>
+                    )}
+
+                    {contact.phone && (
+                      <a
+                        href={`tel:${contact.phone}`}
+                        className="flex items-center gap-2 text-ink-600 hover:text-signal-600 transition-colors"
+                      >
+                        <Phone className="w-4 h-4 text-ink-400 shrink-0" />
+                        <span>{contact.phone}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {!showAllContacts && hiddenCount > 0 && (
+              <button
+                onClick={() => setShowAllContacts(true)}
+                className="mt-3 w-full text-center text-[12.5px] font-medium text-ink-500 hover:text-signal-600 py-2 rounded-lg border border-dashed border-paper-200 hover:border-signal-200 transition-colors"
+              >
+                + {hiddenCount} more contact{hiddenCount === 1 ? "" : "s"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Details + Analysis + Email Preview */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left Column - Details & Contacts */}
         <div className="lg:col-span-1 space-y-5">
           {/* Business Info */}
           <div className="bg-white rounded-card card-hairline p-5">
@@ -201,85 +320,6 @@ export default function BusinessDetails() {
             </div>
           </div>
 
-          {/* Key Contacts Component */}
-          <div className="bg-white rounded-card card-hairline p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-[14.5px] font-semibold text-ink-900-solid flex items-center gap-2">
-                <Users className="w-4 h-4 text-signal-600" />
-                Key Contacts ({business.contacts?.length || 0})
-              </h3>
-            </div>
-
-            {!business.contacts || business.contacts.length === 0 ? (
-              <p className="text-[13px] text-ink-400 italic">
-                No individual contacts found.
-              </p>
-            ) : (
-              <div className="space-y-3.5 divide-y divide-paper-100">
-                {business.contacts.map((contact, idx) => (
-                  <div
-                    key={contact.id || idx}
-                    className={`${idx > 0 ? "pt-3.5" : ""}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-paper-100 text-ink-700 flex items-center justify-center font-semibold text-[11px] shrink-0">
-                          {contact.firstName?.[0] ||
-                            contact.lastName?.[0] ||
-                            "C"}
-                        </div>
-                        <div>
-                          <p className="text-[13px] font-medium text-ink-900-solid leading-tight">
-                            {contact.fullName}
-                          </p>
-                          {contact.jobTitle && (
-                            <p className="inline-flex items-center gap-1 text-[11.5px] text-ink-500 mt-0.5">
-                              <Briefcase className="w-3 h-3 text-ink-400 shrink-0" />
-                              {contact.jobTitle}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {contact.confidenceScore !== undefined && (
-                        <span className="inline-flex items-center text-[10px] font-medium bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-200">
-                          {contact.confidenceScore}% match
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-2.5 space-y-1 pl-9 text-[12px]">
-                      {contact.email ? (
-                        <a
-                          href={`mailto:${contact.email}`}
-                          className="flex items-center gap-2 text-ink-600 hover:text-signal-600 transition-colors"
-                        >
-                          <Mail className="w-3.5 h-3.5 text-ink-400 shrink-0" />
-                          <span className="truncate">{contact.email}</span>
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-2 text-ink-400 italic">
-                          <Mail className="w-3.5 h-3.5 text-ink-300 shrink-0" />
-                          No email available
-                        </div>
-                      )}
-
-                      {contact.phone && (
-                        <a
-                          href={`tel:${contact.phone}`}
-                          className="flex items-center gap-2 text-ink-600 hover:text-signal-600 transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-ink-400 shrink-0" />
-                          <span>{contact.phone}</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Analysis Cards */}
           <AnalysisCard
             title="Detected Problems"
@@ -296,14 +336,12 @@ export default function BusinessDetails() {
           />
         </div>
 
-        {/* Right Column - Email Preview */}
+        {/* Email Preview */}
         <div className="lg:col-span-2">
           <EmailPreview
             subject={business.emailSubject}
             body={business.emailBody}
-            recipientName={
-              business.contacts?.[0]?.fullName || business.contactPerson
-            }
+            recipientName={contacts?.[0]?.fullName || business.contactPerson}
           />
         </div>
       </div>
