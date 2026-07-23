@@ -3,74 +3,82 @@ const { findDecisionMakers } = require("../services/serpApiEnrichment");
 
 const BACKEND_URL = "https://smart-lead-gen-backend.vercel.app/";
 
+// scraper/src/controllers/enrichmentController.js
+
 exports.enrichContact = async (req, res) => {
   const { jobId, businessId } = req.body;
 
-  if (!jobId || !businessId) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing jobId or businessId.",
-    });
-  }
+  // Acknowledge receipt to backend immediately
+  res.json({ success: true, message: "Enrichment job started" });
 
-  // 1. Acknowledge receipt instantly to free up dispatch caller
-  res.status(202).json({
-    success: true,
-    jobId,
-    businessId,
-    message: "Enrichment task queued successfully.",
-  });
+  try {
+    // 1. Mark job as running in DB
+    await pool.query(
+      "UPDATE automation_jobs SET status = 'running' WHERE id = $1",
+      [jobId],
+    );
 
-  // 2. Async Execution Pipeline
-  (async () => {
-    try {
-      // Step 2a: Mark Job as Running
-      await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/start`);
-      console.log(`[Job ${jobId}] Enrichment job marked as 'running'.`);
+    // 2. Fetch business name & location for search query
+    const bRes = await pool.query(
+      "SELECT name, address FROM businesses WHERE id = $1",
+      [businessId],
+    );
 
-      // Step 2b: Fetch Business Record from Backend
-      const bizRes = await axios.get(
-        `${BACKEND_URL}/api/businesses/${businessId}`,
-      );
-      const business = bizRes.data.business;
-
-      console.log(
-        `[Job ${jobId}] Searching decision makers for: ${business.name}...`,
-      );
-
-      // Step 2c: Find Decision Makers using SerpApi
-      const contacts = await findDecisionMakers({
-        name: business.name,
-        city: business.city,
-        country: business.country,
-      });
-
-      console.log(
-        `[Job ${jobId}] Found ${contacts.length} decision maker contacts.`,
-      );
-
-      // Step 2d: Bulk Post Contacts to Backend (Only if matches were found)
-      if (contacts.length > 0) {
-        await axios.post(`${BACKEND_URL}/api/contacts/bulk`, {
-          businessId,
-          contacts: contacts || [],
-        });
-      }
-
-      // Step 2e: Mark Job as Complete
-      await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/complete`);
-      console.log(`[Job ${jobId}] Enrichment job marked as 'completed'!`);
-    } catch (err) {
-      console.error(`[Enrichment Error] Job ${jobId} failed:`, err.message);
-
-      // Notify Backend of Job Failure
-      try {
-        await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/fail`, {
-          error: err.message,
-        });
-      } catch (notifyErr) {
-        console.error(`Failed to fail job ${jobId}:`, notifyErr.message);
-      }
+    if (bRes.rows.length === 0) {
+      throw new Error(`Business not found: ${businessId}`);
     }
-  })();
+
+    const { name, address } = bRes.rows[0];
+
+    // 3. Query SerpApi safely
+    let contacts = [];
+    try {
+      contacts = await fetchLinkedInContactsSerpApi(name, address);
+    } catch (serpErr) {
+      console.error(
+        `SerpApi call failed for business ${businessId}:`,
+        serpErr.message,
+      );
+      // Fallback: proceed with empty contacts array instead of crashing
+      contacts = [];
+    }
+
+    // 4. ALWAYS post back to main backend to advance workflow state
+    await axios.post(`${process.env.BACKEND_URL}/api/contacts/bulk`, {
+      businessId,
+      contacts: contacts || [],
+    });
+
+    // 5. Mark job as completed
+    await pool.query(
+      "UPDATE automation_jobs SET status = 'completed', completed_at = NOW() WHERE id = $1",
+      [jobId],
+    );
+  } catch (err) {
+    console.error(`[Enrichment Error] Job ${jobId} failed:`, err.message);
+
+    // Update job status to failed
+    await pool.query(
+      `UPDATE automation_jobs 
+       SET status = 'failed', completed_at = NOW(), input = jsonb_set(COALESCE(input, '{}'::jsonb), '{error}', $1)
+       WHERE id = $2`,
+      [JSON.stringify(err.message), jobId],
+    );
+
+    // FAILSAFE: Call backend error webhook so business workflow_status doesn't get stuck
+    try {
+      await axios.post(
+        `${process.env.BACKEND_URL}/api/contacts/enrichment-failed`,
+        {
+          businessId,
+          error: err.message,
+        },
+      );
+    } catch (webhookErr) {
+      console.error(
+        "Failed to notify backend of job failure:",
+        webhookErr.message,
+      );
+    }
+  }
 };
