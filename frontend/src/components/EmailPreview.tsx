@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Pencil, Check, Sparkles, Save, Loader2 } from "lucide-react";
+import {
+  RefreshCw,
+  Pencil,
+  Check,
+  Sparkles,
+  Save,
+  Loader2,
+} from "lucide-react";
 
 interface EmailPreviewProps {
   emailId?: string | null;
@@ -22,7 +29,7 @@ export function EmailPreview({
   const [approved, setApproved] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const [error, setError] = useState("");
 
   // Keep state in sync if parent props change
   useEffect(() => {
@@ -30,20 +37,62 @@ export function EmailPreview({
     setDraftBody(body);
   }, [subject, body]);
 
-  function handleRegenerate() {
+  async function handleRegenerate() {
+    if (!emailId) {
+      setError("No email ID available to regenerate.");
+      return;
+    }
+
     setRegenerating(true);
+    setError("");
     setApproved(false);
-    setTimeout(() => setRegenerating(false), 900);
+
+    try {
+      const response = await fetch(
+        `https://smart-lead-gen-backend.vercel.app/api/emails/regenerate/${emailId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || result.message || "Failed to regenerate email",
+        );
+      }
+
+      // Extract new subject & body depending on your controller response shape
+      const updatedSubject =
+        result.data?.subject || result.email?.subject || draftSubject;
+      const updatedBody = result.data?.body || result.email?.body || draftBody;
+
+      setDraftSubject(updatedSubject);
+      setDraftBody(updatedBody);
+
+      if (onSaveSuccess) {
+        onSaveSuccess(updatedSubject, updatedBody);
+      }
+    } catch (err: any) {
+      console.error("Error regenerating email:", err);
+      setError(err.message || "Failed to regenerate email.");
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   async function handleSave() {
     if (!emailId) {
-      setSaveError("No email ID available to save updates.");
+      setError("No email ID available to save updates.");
       return;
     }
 
     setSaving(true);
-    setSaveError("");
+    setError("");
 
     try {
       const response = await fetch(
@@ -57,7 +106,7 @@ export function EmailPreview({
             subject: draftSubject,
             body: draftBody,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -72,7 +121,7 @@ export function EmailPreview({
       }
     } catch (err: any) {
       console.error("Error updating email:", err);
-      setSaveError(err.message || "Failed to save email changes.");
+      setError(err.message || "Failed to save email changes.");
     } finally {
       setSaving(false);
     }
@@ -95,9 +144,9 @@ export function EmailPreview({
       </div>
 
       <div className="p-5">
-        {saveError && (
+        {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[12.5px]">
-            {saveError}
+            {error}
           </div>
         )}
 
@@ -108,7 +157,8 @@ export function EmailPreview({
           <input
             value={draftSubject}
             onChange={(e) => setDraftSubject(e.target.value)}
-            className="w-full mt-1.5 mb-4 px-3 py-2 rounded-lg border border-paper-200 text-[13.5px] font-medium outline-none focus:border-signal-400"
+            disabled={regenerating || saving}
+            className="w-full mt-1.5 mb-4 px-3 py-2 rounded-lg border border-paper-200 text-[13.5px] font-medium outline-none focus:border-signal-400 disabled:opacity-50"
           />
         ) : (
           <p className="mt-1 mb-4 text-[14.5px] font-semibold text-ink-900-solid">
@@ -123,13 +173,16 @@ export function EmailPreview({
           <textarea
             value={draftBody}
             onChange={(e) => setDraftBody(e.target.value)}
+            disabled={regenerating || saving}
             rows={10}
-            className="w-full mt-1.5 px-3 py-2.5 rounded-lg border border-paper-200 text-[13px] leading-relaxed outline-none focus:border-signal-400 resize-none"
+            className="w-full mt-1.5 px-3 py-2.5 rounded-lg border border-paper-200 text-[13px] leading-relaxed outline-none focus:border-signal-400 resize-none disabled:opacity-50"
           />
         ) : (
           <div
             className={
-              regenerating ? "opacity-40 transition-opacity" : "transition-opacity"
+              regenerating
+                ? "opacity-40 transition-opacity"
+                : "transition-opacity"
             }
           >
             <p className="mt-1.5 text-[13px] text-ink-700 leading-relaxed whitespace-pre-line">
@@ -147,19 +200,19 @@ export function EmailPreview({
       <div className="px-5 py-4 border-t border-paper-100 flex flex-wrap gap-2">
         <button
           onClick={handleRegenerate}
-          disabled={saving}
+          disabled={regenerating || saving}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-paper-200 text-[12.5px] font-medium text-ink-700 hover:bg-paper-50 disabled:opacity-50"
         >
           <RefreshCw
             className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`}
           />
-          Regenerate
+          {regenerating ? "Regenerating..." : "Regenerate"}
         </button>
 
         {editing ? (
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={regenerating || saving}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink-900-solid text-white text-[12.5px] font-medium hover:bg-ink-800 disabled:opacity-50"
           >
             {saving ? (
@@ -172,7 +225,8 @@ export function EmailPreview({
         ) : (
           <button
             onClick={() => setEditing(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-paper-200 text-[12.5px] font-medium text-ink-700 hover:bg-paper-50"
+            disabled={regenerating || saving}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-paper-200 text-[12.5px] font-medium text-ink-700 hover:bg-paper-50 disabled:opacity-50"
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
@@ -181,7 +235,7 @@ export function EmailPreview({
 
         <button
           onClick={() => setApproved(true)}
-          disabled={saving}
+          disabled={regenerating || saving}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg signal-gradient text-white text-[12.5px] font-semibold ml-auto disabled:opacity-50"
         >
           <Check className="w-3.5 h-3.5" />

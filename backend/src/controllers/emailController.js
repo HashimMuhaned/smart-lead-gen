@@ -1,4 +1,8 @@
 const pool = require("../db");
+const { GoogleGenAI } = require("@google/genai");
+
+// Initialize Gemini Client
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 exports.updateEmail = async (req, res) => {
   try {
@@ -44,3 +48,78 @@ exports.updateEmail = async (req, res) => {
     });
   }
 };
+
+/**
+ * Regenerate / Paraphrase Email Content
+ * POST /api/emails/:id/regenerate
+ */
+const regenerateEmail = async (req, res) => {
+  const buildParaphrasePrompt = (originalEmail, instructions = "") => {
+    return `You are an expert email copywriter. Your task is to paraphrase and optimize an existing email to make it more engaging, persuasive, and clear, while preserving the original intent.
+
+Original Email:
+"""
+${originalEmail}
+"""
+
+${instructions ? `Additional Tone/Style Instructions: ${instructions}` : ""}
+
+Please output a JSON object strictly matching this schema:
+{
+  "subject": "An engaging, concise subject line for the paraphrased email",
+  "body": "The complete paraphrased email body text with proper line breaks"
+}`;
+  };
+  try {
+    const { id } = req.params;
+    const { customInstructions } = req.body;
+
+    // 1. Fetch existing email from your database (e.g., MongoDB, PostgreSQL)
+    const email = await Email.findById(id); // Adjust according to your ORM/Model
+    if (!email) {
+      return res.status(404).json({ error: "Email not found" });
+    }
+
+    // 2. Build prompt
+    const prompt = buildParaphrasePrompt(
+      email.body || email.content,
+      customInstructions,
+    );
+
+    // 3. Call Gemini API
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash-lite",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.2,
+        maxOutputTokens: 800,
+      },
+    });
+
+    // 4. Parse output text
+    const generatedData = JSON.parse(response.text);
+
+    // 5. Update and save back to DB
+    email.subject = generatedData.subject;
+    email.body = generatedData.body; // or email.content
+    email.isAiRegenerated = true;
+    email.updatedAt = new Date();
+
+    await email.save();
+
+    // 6. Return response
+    return res.status(200).json({
+      message: "Email successfully regenerated and saved",
+      data: email,
+    });
+  } catch (error) {
+    console.error("Error regenerating email:", error);
+    return res.status(500).json({
+      error: "Failed to regenerate email",
+      details: error.message,
+    });
+  }
+};
+
+module.exports = { updateEmail, regenerateEmail };
