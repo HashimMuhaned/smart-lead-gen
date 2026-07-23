@@ -124,10 +124,8 @@ exports.insertBusinesses = async (req, res) => {
       ...jobOutput,
     });
 
-    // 7. Fire-and-forget push dispatcher: Asynchronously notify Scraper Server for each queued job
     // backend/controllers/businessController.js (Step 7)
 
-    // 7. Fire-and-forget push dispatcher: Safely dispatch every queued job independently
     if (queuedJobsToDispatch.length > 0) {
       Promise.allSettled(
         queuedJobsToDispatch.map((job) =>
@@ -136,8 +134,10 @@ exports.insertBusinesses = async (req, res) => {
             {
               jobId: job.jobId,
               businessId: job.businessId,
+              companyName: job.companyName, // Pass business name
+              location: job.location, // Pass address/location
             },
-            { timeout: 10000 }, // 10s timeout on dispatch acknowledgement
+            { timeout: 15000 },
           ),
         ),
       ).then((results) => {
