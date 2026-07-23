@@ -125,25 +125,31 @@ exports.insertBusinesses = async (req, res) => {
     });
 
     // 7. Fire-and-forget push dispatcher: Asynchronously notify Scraper Server for each queued job
+    // backend/controllers/businessController.js (Step 7)
+
+    // 7. Fire-and-forget push dispatcher: Safely dispatch every queued job independently
     if (queuedJobsToDispatch.length > 0) {
-      (async () => {
-        for (const job of queuedJobsToDispatch) {
-          try {
-            await axios.post(`${SCRAPER_SERVICE_URL}/contact-enrichment`, {
+      Promise.allSettled(
+        queuedJobsToDispatch.map((job) =>
+          axios.post(
+            `${SCRAPER_SERVICE_URL}/contact-enrichment`,
+            {
               jobId: job.jobId,
               businessId: job.businessId,
-            });
-            console.log(
-              `[Push Dispatcher] Triggered contact enrichment on Scraper Server for Job ${job.jobId}`,
-            );
-          } catch (err) {
+            },
+            { timeout: 10000 }, // 10s timeout on dispatch acknowledgement
+          ),
+        ),
+      ).then((results) => {
+        results.forEach((res, idx) => {
+          if (res.status === "rejected") {
             console.error(
-              `[Push Dispatcher Error] Failed to trigger Job ${job.jobId}:`,
-              err.message,
+              `[Push Dispatcher Error] Failed to trigger Job ${queuedJobsToDispatch[idx].jobId}:`,
+              res.reason.message,
             );
           }
-        }
-      })();
+        });
+      });
     }
   } catch (err) {
     await client.query("ROLLBACK");

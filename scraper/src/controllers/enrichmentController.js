@@ -29,10 +29,14 @@ exports.enrichContact = async (req, res) => {
       console.log(`[Job ${jobId}] Enrichment job marked as 'running'.`);
 
       // Step 2b: Fetch Business Record from Backend
-      const bizRes = await axios.get(`${BACKEND_URL}/api/businesses/${businessId}`);
+      const bizRes = await axios.get(
+        `${BACKEND_URL}/api/businesses/${businessId}`,
+      );
       const business = bizRes.data.business;
 
-      console.log(`[Job ${jobId}] Searching decision makers for: ${business.name}...`);
+      console.log(
+        `[Job ${jobId}] Searching decision makers for: ${business.name}...`,
+      );
 
       // Step 2c: Find Decision Makers using SerpApi
       const contacts = await findDecisionMakers({
@@ -41,23 +45,24 @@ exports.enrichContact = async (req, res) => {
         country: business.country,
       });
 
-      console.log(`[Job ${jobId}] Found ${contacts.length} decision maker contacts.`);
+      console.log(
+        `[Job ${jobId}] Found ${contacts.length} decision maker contacts.`,
+      );
 
       // Step 2d: Bulk Post Contacts to Backend (Only if matches were found)
       if (contacts.length > 0) {
         await axios.post(`${BACKEND_URL}/api/contacts/bulk`, {
           businessId,
-          contacts,
+          contacts: contacts || [],
         });
       }
 
       // Step 2e: Mark Job as Complete
       await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/complete`);
       console.log(`[Job ${jobId}] Enrichment job marked as 'completed'!`);
-
     } catch (err) {
       console.error(`[Enrichment Error] Job ${jobId} failed:`, err.message);
-      
+
       // Notify Backend of Job Failure
       try {
         await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/fail`, {
