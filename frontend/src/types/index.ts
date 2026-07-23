@@ -18,15 +18,20 @@ export interface Contact {
 }
 
 export interface Business {
-  email: import("react").JSX.Element;
   id: string;
   name: string;
   category: string;
   location: string;
   website: string | null;
   phone: string;
-  contacts: Contact[];
-  contactPerson: string;
+  
+  // Contacts list
+  contacts?: Contact[];
+  
+  // Legacy / optional direct contact fields
+  email?: string | null;
+  contactPerson?: string;
+
   rating: number;
   reviews: number;
   aiScore: number;

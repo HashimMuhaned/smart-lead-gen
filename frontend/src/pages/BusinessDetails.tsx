@@ -113,8 +113,8 @@ export default function BusinessDetails() {
               </div>
 
               <p className="text-[13px] text-ink-500 mt-1">
-                {business.category} · {business.contacts.length} Contact
-                {business.contacts.length === 1 ? "" : "s"}
+                {business.category} · {business?.contacts?.length || 0} Contact
+                {business?.contacts?.length === 1 ? "" : "s"}
               </p>
 
               <p className="inline-flex items-center gap-1 text-[12.5px] text-ink-500 mt-1">
