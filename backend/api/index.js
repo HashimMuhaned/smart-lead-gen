@@ -3,6 +3,7 @@ const cors = require("cors"); // Import the cors package
 const campaignRoutes = require("../src/routes/campaigns");
 const businessRoutes = require("../src/routes/businesses");
 const contactRoutes = require("../src/routes/contacts");
+const emailRoutes = require("../src/routes/email");
 require("dotenv").config();
 
 const app = express();
@@ -42,7 +43,7 @@ app.options(/.*/, cors());
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/businesses", businessRoutes);
 app.use("/api/contacts", contactRoutes);
-
+app.use("/api/emails", emailRoutes);
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Running on port ${PORT}`));

@@ -4,3 +4,5 @@ const router = express.Router();
 const { updateEmail } = require("../controllers/emailController");
 
 router.put("/emails/:id", updateEmail);
+
+module.exports = router;
