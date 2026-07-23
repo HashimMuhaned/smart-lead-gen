@@ -74,10 +74,12 @@ exports.insertBusinesses = async (req, res) => {
           [campaignId, businessId, JSON.stringify({ businessId })],
         );
 
-        // Collect newly created jobs to dispatch to the scraper server
+        // ✅ FIX 1: Capture companyName and location right here!
         queuedJobsToDispatch.push({
           jobId: jobResult.rows[0].id,
           businessId: businessId,
+          companyName: business.name,
+          location: business.address || business.city || "",
         });
       } else {
         skippedCount++;
@@ -115,17 +117,16 @@ exports.insertBusinesses = async (req, res) => {
       [jobId, JSON.stringify(jobOutput)],
     );
 
-    // 5. Commit everything in a single clean transaction
+    // 5. Commit transaction
     await client.query("COMMIT");
 
-    // 6. Return standard response immediately to scraper
+    // 6. Return response to scraper
     res.json({
       success: true,
       ...jobOutput,
     });
 
-    // backend/controllers/businessController.js (Step 7)
-
+    // 7. Dispatch to Scraper Service for Contact Enrichment
     if (queuedJobsToDispatch.length > 0) {
       Promise.allSettled(
         queuedJobsToDispatch.map((job) =>
@@ -134,8 +135,8 @@ exports.insertBusinesses = async (req, res) => {
             {
               jobId: job.jobId,
               businessId: job.businessId,
-              companyName: job.companyName, // Pass business name
-              location: job.location, // Pass address/location
+              companyName: job.companyName, // ✅ Will now contain "Business Name"
+              location: job.location,       // ✅ Will now contain "Address/City"
             },
             { timeout: 15000 },
           ),
