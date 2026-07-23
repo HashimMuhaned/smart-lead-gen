@@ -11,21 +11,25 @@ exports.enrichContact = async (req, res) => {
   res.json({ success: true, message: "Enrichment job received" });
 
   try {
-    // 2. Safely fetch decision makers via SerpApi
     let contacts = [];
+
     if (companyName) {
       try {
-        contacts = await findDecisionMakers(companyName, location || "");
+        // Pass both object format and direct variables or pass an object matching its signature
+        contacts = await findDecisionMakers({
+          companyName: companyName,
+          location: location || "",
+        });
       } catch (serpErr) {
         console.error(
           `[SerpApi Error] Business ${companyName}:`,
           serpErr.message,
         );
-        contacts = []; // Fallback gracefully if SerpApi rate-limits or throws
+        contacts = [];
       }
     }
 
-    // 3. Post back results to main backend (ALWAYS succeeds even if contacts is empty)
+    // 3. Post back results to main backend
     await axios.post(`${BACKEND_URL}/api/contacts/bulk`, {
       jobId,
       businessId,
