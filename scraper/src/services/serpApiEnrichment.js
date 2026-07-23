@@ -1,3 +1,4 @@
+// scraper/src/services/serpApiEnrichment.js
 const axios = require("axios");
 
 const SERPAPI_KEY = process.env.SERPAPI_API_KEY;
@@ -5,14 +6,17 @@ const SERPAPI_KEY = process.env.SERPAPI_API_KEY;
 /**
  * Uses SerpApi Google Search engine to query LinkedIn profiles for business decision makers.
  */
-async function findDecisionMakers({ name, city, country }) {
+async function findDecisionMakers({ companyName, name, location, city, country }) {
   if (!SERPAPI_KEY) {
     console.error("[SerpApi Error] SERPAPI_API_KEY missing in .env");
     return [];
   }
 
-  const locationContext = [city, country].filter(Boolean).join(" ");
-  const query = `site:linkedin.com/in/ "${name}" ${locationContext} ("CEO" OR "Owner" OR "Founder" OR "Managing Director" OR "Manager" OR "Doctor")`;
+  // Support both legacy params (name, city, country) and new params (companyName, location)
+  const targetName = companyName || name;
+  const targetLocation = location || [city, country].filter(Boolean).join(" ");
+
+  const query = `site:linkedin.com/in/ "${targetName}" ${targetLocation} ("CEO" OR "Owner" OR "Founder" OR "Managing Director" OR "Manager" OR "Doctor")`;
 
   console.log(`[SerpApi] Searching Google query: ${query}`);
 
@@ -32,8 +36,6 @@ async function findDecisionMakers({ name, city, country }) {
     for (const item of organicResults) {
       if (!item.link || !item.link.includes("linkedin.com/in/")) continue;
 
-      // Extract Name and Title from snippet or title
-      // Example Title: "Dr. Sarah Ahmed - Managing Director - Royal Crown Dental Clinic | LinkedIn"
       const titleClean = (item.title || "").split("|")[0].split("-");
       const fullName = (titleClean[0] || "").replace(/dr\.?/i, "").trim();
       const jobTitle = titleClean[1] ? titleClean[1].trim() : "Decision Maker";
@@ -46,7 +48,7 @@ async function findDecisionMakers({ name, city, country }) {
         firstName,
         lastName,
         jobTitle,
-        email: null, // Basic Google search doesn't reveal direct emails, keeps NULL safely
+        email: null,
         phone: null,
         linkedinUrl: item.link,
         source: "serpapi_linkedin",
