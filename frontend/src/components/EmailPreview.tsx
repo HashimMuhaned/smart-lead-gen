@@ -6,6 +6,7 @@ import {
   Sparkles,
   Save,
   Loader2,
+  X,
 } from "lucide-react";
 
 interface EmailPreviewProps {
@@ -14,6 +15,50 @@ interface EmailPreviewProps {
   body: string;
   recipientName?: string;
   onSaveSuccess?: (updatedSubject: string, updatedBody: string) => void;
+}
+
+interface StoredDraft {
+  draftSubject: string;
+  draftBody: string;
+  originalSubject: string;
+  originalBody: string;
+}
+
+function getStorageKey(emailId?: string | null) {
+  return emailId ? `email-draft-${emailId}` : null;
+}
+
+function readDraft(emailId?: string | null): StoredDraft | null {
+  const key = getStorageKey(emailId);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredDraft;
+  } catch (e) {
+    console.error("Failed to read email draft from localStorage:", e);
+    return null;
+  }
+}
+
+function writeDraft(emailId: string | null | undefined, draft: StoredDraft) {
+  const key = getStorageKey(emailId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(draft));
+  } catch (e) {
+    console.error("Failed to save email draft to localStorage:", e);
+  }
+}
+
+function clearDraft(emailId?: string | null) {
+  const key = getStorageKey(emailId);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.error("Failed to clear email draft from localStorage:", e);
+  }
 }
 
 export function EmailPreview({
@@ -26,16 +71,66 @@ export function EmailPreview({
   const [editing, setEditing] = useState(false);
   const [draftSubject, setDraftSubject] = useState(subject);
   const [draftBody, setDraftBody] = useState(body);
+  // Snapshot of the values to revert to if the user cancels editing.
+  const [originalSubject, setOriginalSubject] = useState(subject);
+  const [originalBody, setOriginalBody] = useState(body);
   const [approved, setApproved] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Keep state in sync if parent props change
+  // Keep state in sync with parent props, but restore an in-progress draft
+  // from localStorage first if one exists (e.g. after a refresh).
   useEffect(() => {
+    const saved = readDraft(emailId);
+    if (saved) {
+      setDraftSubject(saved.draftSubject);
+      setDraftBody(saved.draftBody);
+      setOriginalSubject(saved.originalSubject);
+      setOriginalBody(saved.originalBody);
+      setEditing(true);
+      return;
+    }
     setDraftSubject(subject);
     setDraftBody(body);
-  }, [subject, body]);
+    setOriginalSubject(subject);
+    setOriginalBody(body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, body, emailId]);
+
+  // Persist the draft to localStorage while editing so it can be restored
+  // on cancel (or after a refresh). Cleared on cancel/save.
+  useEffect(() => {
+    if (!editing) return;
+    writeDraft(emailId, {
+      draftSubject,
+      draftBody,
+      originalSubject,
+      originalBody,
+    });
+  }, [
+    editing,
+    draftSubject,
+    draftBody,
+    originalSubject,
+    originalBody,
+    emailId,
+  ]);
+
+  function handleStartEdit() {
+    // Lock in the "original" snapshot at the moment editing begins.
+    setOriginalSubject(draftSubject);
+    setOriginalBody(draftBody);
+    setEditing(true);
+  }
+
+  function handleCancel() {
+    setDraftSubject(originalSubject);
+    setDraftBody(originalBody);
+    setEditing(false);
+    setError("");
+    clearDraft(emailId);
+  }
 
   async function handleRegenerate() {
     if (!emailId) {
@@ -118,6 +213,9 @@ export function EmailPreview({
       }
 
       setEditing(false);
+      setOriginalSubject(draftSubject);
+      setOriginalBody(draftBody);
+      clearDraft(emailId);
       if (onSaveSuccess) {
         onSaveSuccess(draftSubject, draftBody);
       }
@@ -203,7 +301,7 @@ export function EmailPreview({
         <button
           onClick={handleRegenerate}
           disabled={regenerating || saving}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-paper-200 text-[12.5px] font-medium text-ink-700 hover:bg-paper-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-blue-200 bg-blue-50 text-[12.5px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
         >
           <RefreshCw
             className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`}
@@ -212,23 +310,33 @@ export function EmailPreview({
         </button>
 
         {editing ? (
-          <button
-            onClick={handleSave}
-            disabled={regenerating || saving}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink-900-solid text-white text-[12.5px] font-medium hover:bg-ink-800 disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            Save changes
-          </button>
+          <>
+            <button
+              onClick={handleCancel}
+              disabled={regenerating || saving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 text-[12.5px] font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+            >
+              <X className="w-3.5 h-3.5" />
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={regenerating || saving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              Save changes
+            </button>
+          </>
         ) : (
           <button
-            onClick={() => setEditing(true)}
+            onClick={handleStartEdit}
             disabled={regenerating || saving}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-paper-200 text-[12.5px] font-medium text-ink-700 hover:bg-paper-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-200 bg-amber-50 text-[12.5px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
@@ -238,7 +346,7 @@ export function EmailPreview({
         <button
           onClick={() => setApproved(true)}
           disabled={regenerating || saving}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg signal-gradient text-white text-[12.5px] font-semibold ml-auto disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-green-600 text-white text-[12.5px] font-semibold ml-auto hover:bg-green-700 disabled:opacity-50"
         >
           <Check className="w-3.5 h-3.5" />
           Approve
