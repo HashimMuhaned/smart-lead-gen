@@ -115,6 +115,7 @@ Please output a JSON object strictly matching this schema:
     });
 
     const generatedData = JSON.parse(response.text);
+    cdonsole.log("Generated Email Data:", generatedData);
 
     const updatedResult = await pool.query(
       `

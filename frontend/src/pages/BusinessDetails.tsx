@@ -351,7 +351,7 @@ export default function BusinessDetails() {
                       emailSubject: newSubject,
                       emailBody: newBody,
                     }
-                  : null,
+                  : prev,
               );
             }}
           />

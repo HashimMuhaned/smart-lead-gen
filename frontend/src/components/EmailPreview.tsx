@@ -78,9 +78,7 @@ export function EmailPreview({
       setDraftSubject(updatedSubject);
       setDraftBody(updatedBody);
 
-      if (onSaveSuccess) {
-        onSaveSuccess(updatedSubject, updatedBody);
-      }
+      onSaveSuccess?.(updatedSubject, updatedBody);
     } catch (err: any) {
       console.error("Error regenerating email:", err);
       setError(err.message || "Failed to regenerate email.");
