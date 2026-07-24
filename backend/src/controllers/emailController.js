@@ -77,7 +77,22 @@ Please output a JSON object strictly matching this schema:
     const { customInstructions = "" } = req.body || {};
 
     // 1. Fetch existing email
-    const email = await Email.findById(id);
+    const emailResult = await pool.query(
+      `
+  SELECT id, subject, body
+  FROM emails
+  WHERE id = $1
+  `,
+      [id],
+    );
+
+    if (emailResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Email not found",
+      });
+    }
+
+    const email = emailResult.rows[0];
     if (!email) {
       return res.status(404).json({ error: "Email not found" });
     }
@@ -101,17 +116,22 @@ Please output a JSON object strictly matching this schema:
 
     const generatedData = JSON.parse(response.text);
 
-    // 4. Update & Save
-    email.subject = generatedData.subject;
-    email.body = generatedData.body;
-    email.isAiRegenerated = true;
-    email.updatedAt = new Date();
-
-    await email.save();
+    const updatedResult = await pool.query(
+      `
+  UPDATE emails
+  SET
+    subject = $1,
+    body = $2,
+    updated_at = NOW()
+  WHERE id = $3
+  RETURNING *;
+  `,
+      [generatedData.subject, generatedData.body, id],
+    );
 
     return res.status(200).json({
       message: "Email successfully regenerated and saved",
-      data: email,
+      data: updatedResult.rows[0],
     });
   } catch (error) {
     console.error("Error regenerating email:", error);

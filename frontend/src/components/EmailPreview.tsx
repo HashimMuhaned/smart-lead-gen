@@ -55,11 +55,14 @@ export function EmailPreview({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({}), 
+          body: JSON.stringify({}),
         },
       );
 
       const result = await response.json();
+
+      console.log(response.status);
+      console.log(result);
 
       if (!response.ok) {
         throw new Error(
