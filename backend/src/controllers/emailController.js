@@ -128,7 +128,7 @@ Please output a JSON object strictly matching this schema:
   `,
       [generatedData.subject, generatedData.body, id],
     );
-
+    console.log("Updated Email Result:", updatedResult);
     return res.status(200).json({
       message: "Email successfully regenerated and saved",
       data: updatedResult.rows[0],
