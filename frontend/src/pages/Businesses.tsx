@@ -1,13 +1,12 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Star, Globe2, SlidersHorizontal } from "lucide-react";
+import { Search, Star, Globe2, SlidersHorizontal, Mail } from "lucide-react";
 import { AppLayout } from "@/layout/AppLayout";
 import { DataTable, type Column } from "@/components/DataTable";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreRing } from "@/components/ScoreRing";
 import type { Business } from "@/types";
-import { logoColorStyles } from "@/lib/utils";
 
 const PAGE_SIZE = 8;
 
@@ -125,7 +124,6 @@ export default function Businesses() {
         <div className="flex items-center gap-3">
           <div>
             <p className="font-medium">{r.name}</p>
-
             <p className="text-[11.5px] text-ink-500">{r.contactPerson}</p>
           </div>
         </div>
@@ -148,13 +146,18 @@ export default function Businesses() {
     {
       key: "website",
       header: "Website",
-
       render: (r) =>
         r.website ? (
-          <span className="inline-flex items-center gap-1.5 text-signal-600">
-            <Globe2 className="w-3.5 h-3.5" />
-            {r.website}
-          </span>
+          <a
+            href={r.website}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()} // Prevent row click
+            className="inline-flex items-center gap-1.5 text-signal-600 hover:underline max-w-37.5"
+          >
+            <Globe2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{r.website}</span>
+          </a>
         ) : (
           <span className="text-ink-400">No website</span>
         ),
@@ -168,9 +171,7 @@ export default function Businesses() {
       render: (r) => (
         <span className="inline-flex items-center gap-1">
           <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-
           {r.rating}
-
           <span className="text-ink-400 ml-1">({r.reviews})</span>
         </span>
       ),
@@ -179,8 +180,19 @@ export default function Businesses() {
     {
       key: "email",
       header: "Email",
-
-      render: (r) => r.email ?? <span className="text-ink-400">—</span>,
+      render: (r) =>
+        r.email ? (
+          <a
+            href={`mailto:${r.email}`}
+            onClick={(e) => e.stopPropagation()} // Prevent row click
+            className="inline-flex items-center gap-1.5 text-ink-600 hover:text-signal-600 hover:underline max-w-37.5"
+          >
+            <Mail className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{r.email}</span>
+          </a>
+        ) : (
+          <span className="text-ink-400">—</span>
+        ),
     },
 
     {

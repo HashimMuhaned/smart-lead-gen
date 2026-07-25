@@ -23,13 +23,13 @@ export interface Business {
   category: string;
   location: string;
   website: string | null;
-  phone: string;
+  phone: string[];
 
   // Contacts list
   contacts?: Contact[];
 
   // Legacy / optional direct contact fields
-  email?: string | null;
+  email?: string[];
   contactPerson?: string;
 
   rating: number;

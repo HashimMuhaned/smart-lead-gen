@@ -30,16 +30,16 @@ exports.insertBusinesses = async (req, res) => {
     await client.query("BEGIN");
 
     for (const business of businesses) {
-      // 1. Insert business with default workflow_status 'enriching'
+      // 1. Insert business with new email and jsonb phone fields
       const result = await client.query(
         `
         INSERT INTO businesses
         (
           campaign_id, name, category, address, city, country, 
-          phone, website, google_maps_url, google_rating, 
+          phone, email, website, google_maps_url, google_rating, 
           review_count, social_links, source, workflow_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'enriching')
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'enriching')
         ON CONFLICT (campaign_id, google_maps_url) DO NOTHING
         RETURNING id
         `,
@@ -50,7 +50,8 @@ exports.insertBusinesses = async (req, res) => {
           business.address,
           business.city,
           business.country,
-          business.phone,
+          JSON.stringify(business.phone || []), // ✅ Converted to JSONB Array
+          JSON.stringify(business.email || []), // ✅ New JSONB Array
           business.website,
           business.google_maps_url,
           business.google_rating,
@@ -74,7 +75,6 @@ exports.insertBusinesses = async (req, res) => {
           [campaignId, businessId, JSON.stringify({ businessId })],
         );
 
-        // ✅ FIX 1: Capture companyName and location right here!
         queuedJobsToDispatch.push({
           jobId: jobResult.rows[0].id,
           businessId: businessId,
@@ -99,13 +99,13 @@ exports.insertBusinesses = async (req, res) => {
       [campaignId],
     );
 
-    // 4. Record execution log output for the original scraping job
+    // 4. Record execution log output
     const executionTime = `${((Date.now() - startTime) / 1000).toFixed(2)}s`;
     const jobOutput = {
       inserted: insertedCount,
       skipped: skippedCount,
       executionTime,
-      source: "google_maps",
+      source: "google_maps_with_firecrawl",
     };
 
     await client.query(
@@ -117,26 +117,24 @@ exports.insertBusinesses = async (req, res) => {
       [jobId, JSON.stringify(jobOutput)],
     );
 
-    // 5. Commit transaction
     await client.query("COMMIT");
 
-    // 6. Return response to scraper
     res.json({
       success: true,
       ...jobOutput,
     });
 
-    // 7. Dispatch to Scraper Service for Contact Enrichment
+    // 7. Dispatch to Scraper Service for Contact Enrichment (Unchanged)
     if (queuedJobsToDispatch.length > 0) {
       Promise.allSettled(
         queuedJobsToDispatch.map((job) =>
           axios.post(
-            `${SCRAPER_SERVICE_URL}/contact-enrichment`,
+            `${process.env.SCRAPER_SERVICE_URL || "http://localhost:3000"}/contact-enrichment`,
             {
               jobId: job.jobId,
               businessId: job.businessId,
-              companyName: job.companyName, // ✅ Will now contain "Business Name"
-              location: job.location,       // ✅ Will now contain "Address/City"
+              companyName: job.companyName,
+              location: job.location,
             },
             { timeout: 15000 },
           ),
@@ -422,6 +420,7 @@ exports.getBusinesses = async (req, res) => {
         CONCAT_WS(', ', NULLIF(b.city, ''), NULLIF(b.country, '')) AS location,
         b.website,
         COALESCE(b.phone, 'N/A') AS phone,
+        b.email AS business_emails, -- 👈 Added business emails array
         b.google_rating AS rating,
         COALESCE(b.review_count, 0) AS reviews,
         COALESCE(b.source, 'Google Maps') AS source,
@@ -491,6 +490,11 @@ exports.getBusinesses = async (req, res) => {
             .toUpperCase()
         : "BI";
 
+      // 1. Check for contact email
+      // 2. If null, check for first email in business general emails array
+      const businessEmailArray = Array.isArray(row.business_emails) ? row.business_emails : [];
+      const primaryEmail = row.contact_email || (businessEmailArray.length > 0 ? businessEmailArray[0] : null);
+
       return {
         id: row.id,
         name: row.name,
@@ -498,7 +502,7 @@ exports.getBusinesses = async (req, res) => {
         location: row.location || "Dubai, UAE",
         website: row.website || null,
         phone: row.phone,
-        email: row.contact_email || null,
+        email: primaryEmail, // 👈 Returns a single string (or null)
         rating: row.rating ? parseFloat(row.rating) : 0.0,
         reviews: row.reviews ? parseInt(row.reviews, 10) : 0,
         contactPerson: row.contact_person_name?.trim() || "Business Owner",
@@ -543,6 +547,7 @@ exports.getBusinessDetails = async (req, res) => {
 
         b.website,
         b.phone,
+        b.email,  -- 👈 Added email column here
         b.google_rating,
         b.review_count,
         b.source,
@@ -624,7 +629,8 @@ exports.getBusinessDetails = async (req, res) => {
       firstName: c.firstName || "",
       lastName: c.lastName || "",
       fullName:
-        [c.firstName, c.lastName].filter(Boolean).join(" ") || "Unnamed Contact",
+        [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+        "Unnamed Contact",
       jobTitle: c.jobTitle || "N/A",
       email: c.email || null,
       phone: c.phone || null,
@@ -641,7 +647,11 @@ exports.getBusinessDetails = async (req, res) => {
       category: row.category || "General",
       location: row.location || "Dubai, UAE",
       website: row.website || null,
-      phone: row.phone || "N/A",
+      
+      // 👇 Phone and Email mapped directly as arrays (defaulting to empty arrays if null)
+      phone: Array.isArray(row.phone) ? row.phone : [],
+      email: Array.isArray(row.email) ? row.email : [],
+      
       contacts: contacts,
       contactPerson: primaryContactName,
       rating: Number(row.google_rating || 0),
@@ -656,7 +666,7 @@ exports.getBusinessDetails = async (req, res) => {
       employeeCount: `${contacts.length || 1}-${Math.max(10, contacts.length)}`,
       detectedProblems: row.detected_problems || [],
       recommendedServices: row.recommendations || [],
-      emailId: row.email_id || null, // 👈 Added emailId
+      emailId: row.email_id || null, 
       emailSubject: row.subject || "Partnership Opportunity",
       emailBody: row.body || "",
       source: row.source === "google_maps" ? "Google Maps" : row.source,

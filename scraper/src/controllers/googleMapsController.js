@@ -1,8 +1,8 @@
 const { scrape } = require("../services/googleMapScraper");
+const { crawlWebsiteForContacts } = require("../services/firecrawlCrawler");
 const axios = require("axios");
 
-// Your main backend URL (fallback to localhost if env isn't set)
-const BACKEND_URL = "https://smart-lead-gen-backend.vercel.app/";
+const BACKEND_URL = process.env.BACKEND_URL || "https://smart-lead-gen-backend.vercel.app";
 
 exports.scrapeGoogleMaps = async (req, res) => {
   const { jobId, campaignId, industry, location, limit } = req.body;
@@ -14,7 +14,7 @@ exports.scrapeGoogleMaps = async (req, res) => {
     });
   }
 
-  // 1. Instantly respond to the caller (n8n or backend) to prevent timeouts
+  // 1. Instantly respond to prevent timeouts
   res.status(202).json({
     success: true,
     jobId,
@@ -22,25 +22,41 @@ exports.scrapeGoogleMaps = async (req, res) => {
     message: "Scraper task successfully queued on server.",
   });
 
-  // 2. Execute the long-running scraping task asynchronously in the background
+  // 2. Execute long-running task asynchronously
   (async () => {
     console.log(`[Job ${jobId}] Initializing background scraping execution...`);
     
     try {
-      // Notify backend that the job is now active
       await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/start`);
-      console.log(`[Job ${jobId}] Status successfully marked as 'running' on backend.`);
+      
+      // Perform Google Maps scraping
+      const businesses = await scrape({ industry, location, limit });
+      console.log(`[Job ${jobId}] Scraped ${businesses.length} maps records. Starting website crawling...`);
 
-      // Perform the actual scraping operation
-      const businesses = await scrape({
-        industry,
-        location,
-        limit,
-      });
+      // 3. Firecrawl Website Extraction
+      for (let i = 0; i < businesses.length; i++) {
+        const biz = businesses[i];
+        
+        // Initialize arrays (convert Google Map's single phone string to an array)
+        let mergedPhones = biz.phone ? [biz.phone] : [];
+        let mergedEmails = [];
 
-      console.log(`[Job ${jobId}] Successfully scraped ${businesses.length} records. Sending payload to backend...`);
+        if (biz.website) {
+          console.log(`[Job ${jobId}] Crawling ${biz.website}...`);
+          const { emails, phones } = await crawlWebsiteForContacts(biz.website);
+          
+          mergedEmails.push(...emails);
+          mergedPhones.push(...phones);
+        }
 
-      // Send the bulk businesses payload back to the backend
+        // Deduplicate and reassign to the business object
+        biz.phone = [...new Set(mergedPhones.filter(Boolean))];
+        biz.email = [...new Set(mergedEmails.filter(Boolean))];
+      }
+
+      console.log(`[Job ${jobId}] Crawling complete. Sending payload to backend...`);
+
+      // 4. Send bulk payload back to backend
       const response = await axios.post(`${BACKEND_URL}/api/businesses/bulk`, {
         jobId,
         campaignId,
@@ -49,21 +65,18 @@ exports.scrapeGoogleMaps = async (req, res) => {
 
       console.log(`[Job ${jobId}] Bulk database insertion successful:`, response.data);
 
-      // Complete the job lifecycle
+      // Complete lifecycle
       await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/complete`);
-      console.log(`[Job ${jobId}] Job marked as 'completed' successfully!`);
 
     } catch (error) {
       console.error(`[Critical Background Error] Job ${jobId} failed:`, error.message);
       
-      // Notify backend of the failure so your pipeline doesn't hang forever
       try {
         await axios.patch(`${BACKEND_URL}/api/campaigns/jobs/${jobId}/fail`, {
           error: error.message,
         });
-        console.log(`[Job ${jobId}] Status successfully marked as 'failed' on backend.`);
       } catch (notifyError) {
-        console.error(`Failed to notify backend of job ${jobId} failure:`, notifyError.message);
+        console.error(`Failed to notify backend of job failure:`, notifyError.message);
       }
     }
   })();

@@ -269,7 +269,7 @@ export default function BusinessDetails() {
                     href={business.website}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:underline truncate"
+                    className="hover:underline hover:text-signal-600 truncate"
                   >
                     {business.website}
                   </a>
@@ -278,9 +278,42 @@ export default function BusinessDetails() {
                 )}
               </li>
 
-              <li className="flex items-center gap-2.5 text-ink-700">
-                <Phone className="w-4 h-4 text-ink-400 shrink-0" />
-                {business.phone}
+              <li className="flex items-start gap-2.5 text-ink-700">
+                <Mail className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  {business.email && business.email.length > 0 ? (
+                    business.email.map((emailString, idx) => (
+                      <a
+                        key={idx}
+                        href={`mailto:${emailString}`}
+                        className="hover:underline hover:text-signal-600 break-all"
+                      >
+                        {emailString}
+                      </a>
+                    ))
+                  ) : (
+                    <span className="text-ink-400">No email found</span>
+                  )}
+                </div>
+              </li>
+
+              <li className="flex items-start gap-2.5 text-ink-700">
+                <Phone className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  {business.phone && business.phone.length > 0 ? (
+                    business.phone.map((phoneString, idx) => (
+                      <a
+                        key={idx}
+                        href={`tel:${phoneString}`}
+                        className="hover:underline hover:text-signal-600"
+                      >
+                        {phoneString}
+                      </a>
+                    ))
+                  ) : (
+                    <span className="text-ink-400">No phone found</span>
+                  )}
+                </div>
               </li>
 
               <li className="flex items-center gap-2.5 text-ink-700">
