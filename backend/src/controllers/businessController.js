@@ -420,7 +420,7 @@ exports.getBusinesses = async (req, res) => {
         CONCAT_WS(', ', NULLIF(b.city, ''), NULLIF(b.country, '')) AS location,
         b.website,
         b.phone, -- 👈 Removed the COALESCE that was crashing the JSON parser
-        b.email AS business_emails,
+        b.emails AS business_emails,
         b.google_rating AS rating,
         COALESCE(b.review_count, 0) AS reviews,
         COALESCE(b.source, 'Google Maps') AS source,
@@ -554,7 +554,7 @@ exports.getBusinessDetails = async (req, res) => {
 
         b.website,
         b.phone,
-        b.email,  -- 👈 Added email column here
+        b.emails,  -- 👈 Added email column here
         b.google_rating,
         b.review_count,
         b.source,
