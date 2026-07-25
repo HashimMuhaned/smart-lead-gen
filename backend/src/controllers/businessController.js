@@ -128,7 +128,7 @@ exports.insertBusinesses = async (req, res) => {
       Promise.allSettled(
         queuedJobsToDispatch.map((job) =>
           axios.post(
-            `${process.env.SCRAPER_SERVICE_URL}/contact-enrichment`,
+            `${SCRAPER_SERVICE_URL}/contact-enrichment`,
             {
               jobId: job.jobId,
               businessId: job.businessId,
