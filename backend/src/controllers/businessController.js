@@ -6,7 +6,6 @@ const N8N_ENRICHMENT_WEBHOOK =
   "https://n8nselfhostedautomations.tech/webhook/contact-enrichment";
 
 const SCRAPER_SERVICE_URL =
-  process.env.SCRAPER_SERVICE_URL ||
   "https://scrape-service.n8nselfhostedautomations.tech";
 
 exports.insertBusinesses = async (req, res) => {
@@ -129,7 +128,7 @@ exports.insertBusinesses = async (req, res) => {
       Promise.allSettled(
         queuedJobsToDispatch.map((job) =>
           axios.post(
-            `${process.env.SCRAPER_SERVICE_URL || "http://localhost:3000"}/contact-enrichment`,
+            `${process.env.SCRAPER_SERVICE_URL}/contact-enrichment`,
             {
               jobId: job.jobId,
               businessId: job.businessId,
@@ -491,8 +490,12 @@ exports.getBusinesses = async (req, res) => {
         : "BI";
 
       // Safely process emails
-      const businessEmailArray = Array.isArray(row.business_emails) ? row.business_emails : [];
-      const primaryEmail = row.contact_email || (businessEmailArray.length > 0 ? businessEmailArray[0] : null);
+      const businessEmailArray = Array.isArray(row.business_emails)
+        ? row.business_emails
+        : [];
+      const primaryEmail =
+        row.contact_email ||
+        (businessEmailArray.length > 0 ? businessEmailArray[0] : null);
 
       // 👈 Safely process the phone array to match your frontend `phone: string[]` type
       let phoneArray = [];
@@ -654,11 +657,11 @@ exports.getBusinessDetails = async (req, res) => {
       category: row.category || "General",
       location: row.location || "Dubai, UAE",
       website: row.website || null,
-      
+
       // 👇 Phone and Email mapped directly as arrays (defaulting to empty arrays if null)
       phone: Array.isArray(row.phone) ? row.phone : [],
       email: Array.isArray(row.email) ? row.email : [],
-      
+
       contacts: contacts,
       contactPerson: primaryContactName,
       rating: Number(row.google_rating || 0),
@@ -673,7 +676,7 @@ exports.getBusinessDetails = async (req, res) => {
       employeeCount: `${contacts.length || 1}-${Math.max(10, contacts.length)}`,
       detectedProblems: row.detected_problems || [],
       recommendedServices: row.recommendations || [],
-      emailId: row.email_id || null, 
+      emailId: row.email_id || null,
       emailSubject: row.subject || "Partnership Opportunity",
       emailBody: row.body || "",
       source: row.source === "google_maps" ? "Google Maps" : row.source,
