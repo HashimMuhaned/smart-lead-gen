@@ -419,8 +419,8 @@ exports.getBusinesses = async (req, res) => {
         COALESCE(b.category, 'General') AS category,
         CONCAT_WS(', ', NULLIF(b.city, ''), NULLIF(b.country, '')) AS location,
         b.website,
-        COALESCE(b.phone, 'N/A') AS phone,
-        b.email AS business_emails, -- 👈 Added business emails array
+        b.phone, -- 👈 Removed the COALESCE that was crashing the JSON parser
+        b.email AS business_emails,
         b.google_rating AS rating,
         COALESCE(b.review_count, 0) AS reviews,
         COALESCE(b.source, 'Google Maps') AS source,
@@ -490,10 +490,17 @@ exports.getBusinesses = async (req, res) => {
             .toUpperCase()
         : "BI";
 
-      // 1. Check for contact email
-      // 2. If null, check for first email in business general emails array
+      // Safely process emails
       const businessEmailArray = Array.isArray(row.business_emails) ? row.business_emails : [];
       const primaryEmail = row.contact_email || (businessEmailArray.length > 0 ? businessEmailArray[0] : null);
+
+      // 👈 Safely process the phone array to match your frontend `phone: string[]` type
+      let phoneArray = [];
+      if (Array.isArray(row.phone)) {
+        phoneArray = row.phone;
+      } else if (typeof row.phone === "string" && row.phone.trim() !== "") {
+        phoneArray = [row.phone];
+      }
 
       return {
         id: row.id,
@@ -501,8 +508,8 @@ exports.getBusinesses = async (req, res) => {
         category: row.category,
         location: row.location || "Dubai, UAE",
         website: row.website || null,
-        phone: row.phone,
-        email: primaryEmail, // 👈 Returns a single string (or null)
+        phone: phoneArray, // 👈 Now safely returns an array in JS
+        email: primaryEmail,
         rating: row.rating ? parseFloat(row.rating) : 0.0,
         reviews: row.reviews ? parseInt(row.reviews, 10) : 0,
         contactPerson: row.contact_person_name?.trim() || "Business Owner",
