@@ -123,12 +123,6 @@ export default function Businesses() {
 
       render: (r) => (
         <div className="flex items-center gap-3">
-          <div
-            className={`w-9 h-9 rounded-lg flex items-center justify-center text-[11.5px] font-semibold shrink-0 ${logoColorStyles[r.logoColor]}`}
-          >
-            {r.logoInitials}
-          </div>
-
           <div>
             <p className="font-medium">{r.name}</p>
 
