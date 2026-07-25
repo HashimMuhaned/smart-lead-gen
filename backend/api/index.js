@@ -15,6 +15,7 @@ const allowedOrigins = [
   "https://smart-lead-gen-frontend.vercel.app",
   "https://scrape-service.n8nselfhostedautomations.tech",
   "http://localhost:5173",
+  "https://smart-lead.shaitech.dev",
 ];
 
 // 2. Configure CORS middleware dynamically
