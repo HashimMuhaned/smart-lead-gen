@@ -22,95 +22,33 @@ function parseReviewCountString(str) {
 }
 
 /**
- * Waits for the sidebar to actually update to a NEW business, rather than
- * just waiting for "an h1 to exist" (which is already true from the
- * previous business and resolves instantly, causing a race).
- */
-async function waitForPanelUpdate(page, previousH1Text, timeout = 12000) {
-  try {
-    await page.waitForFunction(
-      (prevText) => {
-        const el = document.querySelector("h1");
-        return (
-          !!el &&
-          el.innerText.trim().length > 0 &&
-          el.innerText.trim() !== prevText
-        );
-      },
-      previousH1Text,
-      { timeout },
-    );
-  } catch {
-    // Didn't detect a change in time — fall through and try extraction
-    // anyway rather than aborting the whole business.
-  }
-  // Small settle buffer: h1 updates first, metrics/category/address load
-  // fractionally after. This is cheap insurance on top of the real wait above.
-  await page.waitForTimeout(500);
-}
-
-/**
- * Extracts profile details for a business card with multi-layer fallback strategies.
+ * Extracts full profile details for a business using its captured card
+ * metadata (name, href, rating, review count) plus a fresh navigation to
+ * its detail page.
+ *
  * @param {import('playwright').Page} page
- * @param {import('playwright').Locator} card
+ * @param {{name: string|null, href: string|null, ratingLabel: string|null, reviewLabel: string|null, cardText: string|null}} cardMeta
  * @returns {Promise<object>}
  */
-async function extractBusiness(page, card) {
-  await card.scrollIntoViewIfNeeded().catch(() => {});
+async function extractBusiness(page, cardMeta) {
+  const {
+    name: cardName,
+    href: googleMapsUrl,
+    ratingLabel,
+    reviewLabel,
+    cardText,
+  } = cardMeta;
+  const name = cardName || "Unknown Business";
 
-  const name = (await card.getAttribute("aria-label")) || "Unknown Business";
-  const googleMapsUrl = await card.getAttribute("href");
-
-  let rating = null;
-  let reviewCount = null;
-
-  // ==========================================
-  // STRATEGY 1: Feed Card Extraction
-  // ==========================================
-  try {
-    const ratingElement = card
-      .locator(
-        'span[aria-label*="star"], span[aria-label*="rating"], span[role="img"]',
-      )
-      .first();
-
-    if (await ratingElement.isVisible({ timeout: 500 })) {
-      const rawLabel = await ratingElement.getAttribute("aria-label");
-      rating = parseRatingString(rawLabel);
-    }
-
-    if (!rating) {
-      const ratingTextEl = card
-        .locator('span[class*="MW43ed"], span.MW43ed')
-        .first();
-      if (await ratingTextEl.isVisible({ timeout: 500 })) {
-        rating = parseRatingString(await ratingTextEl.innerText());
-      }
-    }
-
-    const reviewElement = card
-      .locator(
-        'span[aria-label*="review"], span[aria-label*="opinions"], span[aria-label*="rating"]',
-      )
-      .first();
-
-    if (await reviewElement.isVisible({ timeout: 500 })) {
-      const rawReviews = await reviewElement.getAttribute("aria-label");
-      reviewCount = parseReviewCountString(rawReviews);
-    }
-
-    if (!reviewCount) {
-      const cardText = await card.innerText();
-      const parenMatch = cardText.match(/\((\d[\d\,\.\s]*)\)/);
-      if (parenMatch) {
-        reviewCount = parseReviewCountString(parenMatch[1]);
-      }
-    }
-  } catch (e) {
-    console.warn(`[${name}] Feed card rating extraction skipped: ${e.message}`);
+  // Rating/review come straight from the feed metadata captured up front —
+  // no click needed for these, so they were never affected by the bug.
+  let rating = parseRatingString(ratingLabel);
+  let reviewCount = parseReviewCountString(reviewLabel);
+  if (!reviewCount && cardText) {
+    const parenMatch = cardText.match(/\((\d[\d\,\.\s]*)\)/);
+    if (parenMatch) reviewCount = parseReviewCountString(parenMatch[1]);
   }
 
-  // Details fields
   let category = null;
   let address = null;
   let phone = null;
@@ -118,42 +56,46 @@ async function extractBusiness(page, card) {
   let social_links = {};
 
   try {
-    // Capture the CURRENT panel's h1 text before we click, so we can prove
-    // the panel actually advanced to this business before reading from it.
-    const previousH1Text = await page
+    if (!googleMapsUrl) throw new Error("No href captured for this card");
+
+    // Navigate DIRECTLY to this business's place URL instead of clicking
+    // into a shared, mutating feed panel. This is the actual fix: each
+    // business now gets a fully isolated page load, so there's no way for
+    // a previous business's detail-panel data (website, phone, category,
+    // etc.) to leak into the next one.
+    const targetUrl = googleMapsUrl.startsWith("http")
+      ? googleMapsUrl
+      : new URL(googleMapsUrl, page.url()).toString();
+
+    await page.goto(targetUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 20000,
+    });
+    await page.waitForSelector("h1", { timeout: 10000 });
+    await page.waitForTimeout(600); // settle buffer for metrics/category/address to hydrate
+
+    // Sanity check: warn (don't fail) if the loaded page's h1 doesn't
+    // resemble the name we captured from the feed. Helps catch any future
+    // navigation weirdness without silently trusting mismatched data.
+    const loadedH1 = await page
       .locator("h1")
       .first()
       .innerText()
       .catch(() => "");
-
-    // Click via the href we already captured rather than the original
-    // positional locator. Google Maps virtualizes the feed (detaches
-    // off-screen cards), so by the time we reach card #N in the loop, its
-    // original nth() index can silently resolve to a different element.
-    // href is a stable per-listing identity and avoids that drift.
-    if (googleMapsUrl) {
-      const stableTarget = page.locator(`a[href="${googleMapsUrl}"]`).first();
-      await stableTarget.click({ timeout: 5000 }).catch(async () => {
-        // Fall back to the original locator if the href-based one somehow
-        // isn't found (e.g. relative vs absolute href mismatch).
-        await card.click();
-      });
-    } else {
-      await card.click();
+    if (
+      loadedH1 &&
+      cardName &&
+      !loadedH1.toLowerCase().includes(cardName.toLowerCase().slice(0, 10))
+    ) {
+      console.warn(
+        `[Mismatch Warning] Expected "${cardName}" but loaded page shows "${loadedH1}"`,
+      );
     }
 
-    await page.waitForSelector("h1", { timeout: 10000 });
-    await waitForPanelUpdate(page, previousH1Text);
-
-    // Scope detail extraction to the details pane where possible, to avoid
-    // accidentally matching unrelated links/text elsewhere on the page
-    // (e.g. the still-visible feed list, or Maps UI chrome).
     const mainPanel = page.locator('div[role="main"]');
     const scope = (await mainPanel.count()) > 0 ? mainPanel.first() : page;
 
-    // ==========================================
-    // STRATEGY 2: Sidebar Profile Fallbacks
-    // ==========================================
+    // Sidebar fallback for rating/review, in case feed metadata missed them
     if (!rating || !reviewCount) {
       try {
         if (!rating) {
@@ -198,7 +140,7 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 3. Category extraction
+    // Category
     const categorySelectors = [
       'button[jsaction*="pane.rating.category"]',
       'button[jsaction*="category"]',
@@ -211,8 +153,6 @@ async function extractBusiness(page, card) {
         if (category) break;
       }
     }
-    // Last-resort fallback, guarded by length so it can't grab a paragraph
-    // of hours/address/description text instead of a short category chip.
     if (!category) {
       const catEl = scope.locator(".fontBodyMedium").first();
       if (await catEl.isVisible({ timeout: 500 }).catch(() => false)) {
@@ -221,7 +161,7 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 4. Address extraction
+    // Address
     const addressSelectors = [
       'button[data-item-id="address"]',
       '[data-tooltip*="Copy address"]',
@@ -236,7 +176,7 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 5. Phone extraction
+    // Phone
     const phoneSelectors = [
       'button[data-item-id^="phone:tel:"]',
       '[data-tooltip*="Copy phone number"]',
@@ -251,7 +191,7 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 6. Website extraction
+    // Website
     const websiteSelectors = [
       'a[data-item-id="authority"]',
       'a[aria-label*="Website:"]',
@@ -267,8 +207,6 @@ async function extractBusiness(page, card) {
         }
       }
     }
-    // Broad fallback only as an absolute last resort, and scoped to the
-    // details panel (not the whole page) to avoid grabbing unrelated links.
     if (!website) {
       const webEl = scope
         .locator('a[href^="http"]:not([href*="google.com"])')
@@ -279,7 +217,7 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 7. Social Links extraction
+    // Social links
     const rawLinks = await scope
       .locator(
         'a[href*="facebook.com"], a[href*="instagram.com"], a[href*="linkedin.com"], a[href*="twitter.com"], a[href*="youtube.com"], a[href*="x.com"]',

@@ -6,7 +6,7 @@ async function launchBrowser() {
   const isProd = process.env.NODE_ENV === "production";
 
   const browser = await chromium.launch({
-    headless: true, 
+    headless: true,
   });
 
   return browser;
