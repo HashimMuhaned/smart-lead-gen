@@ -25,6 +25,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Business } from "@/types";
 
 const CONTACTS_PREVIEW_COUNT = 4;
+const PHONE_PREVIEW_COUNT = 3;
+const EMAIL_PREVIEW_COUNT = 2;
 
 export default function BusinessDetails() {
   const { id } = useParams();
@@ -34,6 +36,8 @@ export default function BusinessDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAllContacts, setShowAllContacts] = useState(false);
+  const [showAllPhones, setShowAllPhones] = useState(false);
+  const [showAllEmails, setShowAllEmails] = useState(false);
 
   useEffect(() => {
     async function fetchBusiness() {
@@ -70,6 +74,19 @@ export default function BusinessDetails() {
   }, [contacts, showAllContacts]);
 
   const hiddenCount = contacts.length - CONTACTS_PREVIEW_COUNT;
+
+  const phones = business?.phone || [];
+  const emails = business?.email || [];
+
+  const visiblePhones = showAllPhones
+    ? phones
+    : phones.slice(0, PHONE_PREVIEW_COUNT);
+  const hiddenPhoneCount = phones.length - PHONE_PREVIEW_COUNT;
+
+  const visibleEmails = showAllEmails
+    ? emails
+    : emails.slice(0, EMAIL_PREVIEW_COUNT);
+  const hiddenEmailCount = emails.length - EMAIL_PREVIEW_COUNT;
 
   if (loading) {
     return (
@@ -280,17 +297,38 @@ export default function BusinessDetails() {
 
               <li className="flex items-start gap-2.5 text-ink-700">
                 <Mail className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-1">
-                  {business.email && business.email.length > 0 ? (
-                    business.email.map((emailString, idx) => (
-                      <a
-                        key={idx}
-                        href={`mailto:${emailString}`}
-                        className="hover:underline hover:text-signal-600 break-all"
-                      >
-                        {emailString}
-                      </a>
-                    ))
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  {emails.length > 0 ? (
+                    <>
+                      {visibleEmails.map((emailString, idx) => (
+                        <a
+                          key={idx}
+                          href={`mailto:${emailString}`}
+                          className="hover:underline hover:text-signal-600 break-all"
+                        >
+                          {emailString}
+                        </a>
+                      ))}
+
+                      {emails.length > EMAIL_PREVIEW_COUNT && (
+                        <button
+                          onClick={() => setShowAllEmails((v) => !v)}
+                          className="inline-flex items-center gap-1 text-[12px] font-medium text-ink-500 hover:text-signal-600 transition-colors self-start mt-0.5"
+                        >
+                          {showAllEmails ? (
+                            <>
+                              Show less
+                              <ChevronUp className="w-3 h-3" />
+                            </>
+                          ) : (
+                            <>
+                              +{hiddenEmailCount} more
+                              <ChevronDown className="w-3 h-3" />
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <span className="text-ink-400">No email found</span>
                   )}
@@ -299,17 +337,40 @@ export default function BusinessDetails() {
 
               <li className="flex items-start gap-2.5 text-ink-700">
                 <Phone className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-1">
-                  {business.phone && business.phone.length > 0 ? (
-                    business.phone.map((phoneString, idx) => (
-                      <a
-                        key={idx}
-                        href={`tel:${phoneString}`}
-                        className="hover:underline hover:text-signal-600"
-                      >
-                        {phoneString}
-                      </a>
-                    ))
+                <div className="flex flex-col gap-1.5 min-w-0 w-full">
+                  {phones.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap gap-1.5">
+                        {visiblePhones.map((phoneString, idx) => (
+                          <a
+                            key={idx}
+                            href={`tel:${phoneString}`}
+                            className="text-[12.5px] px-2.5 py-1 rounded-full bg-paper-50 border border-paper-100 text-ink-700 hover:border-signal-200 hover:text-signal-600 transition-colors"
+                          >
+                            {phoneString}
+                          </a>
+                        ))}
+                      </div>
+
+                      {phones.length > PHONE_PREVIEW_COUNT && (
+                        <button
+                          onClick={() => setShowAllPhones((v) => !v)}
+                          className="inline-flex items-center gap-1 text-[12px] font-medium text-ink-500 hover:text-signal-600 transition-colors self-start mt-0.5"
+                        >
+                          {showAllPhones ? (
+                            <>
+                              Show less
+                              <ChevronUp className="w-3 h-3" />
+                            </>
+                          ) : (
+                            <>
+                              +{hiddenPhoneCount} more
+                              <ChevronDown className="w-3 h-3" />
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <span className="text-ink-400">No phone found</span>
                   )}
