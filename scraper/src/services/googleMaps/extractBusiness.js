@@ -1,8 +1,5 @@
 const { parseAddress, cleanText } = require("./utils");
 
-/**
- * Robustly parses rating string into float (handles "4.8", "4,8", etc.)
- */
 function parseRatingString(str) {
   if (!str) return null;
   const match = str.match(/(\d(?:[\.,]\d)?)/);
@@ -13,20 +10,43 @@ function parseRatingString(str) {
   return null;
 }
 
-/**
- * Robustly parses review count string into integer (handles "1,250", "1.250", "1 250", "(45)")
- */
 function parseReviewCountString(str) {
   if (!str) return null;
-  // Match number sequences including commas, dots, or spaces used as thousand separators
   const match = str.match(/(\d[\d\,\.\s]*)/);
   if (match) {
-    // Strip non-digit characters
     const digitsOnly = match[1].replace(/\D/g, "");
     const val = parseInt(digitsOnly, 10);
     return isNaN(val) ? null : val;
   }
   return null;
+}
+
+/**
+ * Waits for the sidebar to actually update to a NEW business, rather than
+ * just waiting for "an h1 to exist" (which is already true from the
+ * previous business and resolves instantly, causing a race).
+ */
+async function waitForPanelUpdate(page, previousH1Text, timeout = 12000) {
+  try {
+    await page.waitForFunction(
+      (prevText) => {
+        const el = document.querySelector("h1");
+        return (
+          !!el &&
+          el.innerText.trim().length > 0 &&
+          el.innerText.trim() !== prevText
+        );
+      },
+      previousH1Text,
+      { timeout },
+    );
+  } catch {
+    // Didn't detect a change in time — fall through and try extraction
+    // anyway rather than aborting the whole business.
+  }
+  // Small settle buffer: h1 updates first, metrics/category/address load
+  // fractionally after. This is cheap insurance on top of the real wait above.
+  await page.waitForTimeout(500);
 }
 
 /**
@@ -48,7 +68,6 @@ async function extractBusiness(page, card) {
   // STRATEGY 1: Feed Card Extraction
   // ==========================================
   try {
-    // 1A. Try aria-label on rating star container
     const ratingElement = card
       .locator(
         'span[aria-label*="star"], span[aria-label*="rating"], span[role="img"]',
@@ -60,7 +79,6 @@ async function extractBusiness(page, card) {
       rating = parseRatingString(rawLabel);
     }
 
-    // 1B. Fallback: Parse inner text of rating directly from card if aria-label failed
     if (!rating) {
       const ratingTextEl = card
         .locator('span[class*="MW43ed"], span.MW43ed')
@@ -70,7 +88,6 @@ async function extractBusiness(page, card) {
       }
     }
 
-    // 1C. Extract Review Count from Feed Card
     const reviewElement = card
       .locator(
         'span[aria-label*="review"], span[aria-label*="opinions"], span[aria-label*="rating"]',
@@ -82,7 +99,6 @@ async function extractBusiness(page, card) {
       reviewCount = parseReviewCountString(rawReviews);
     }
 
-    // 1D. Fallback: Check parent container text for review count in parentheses, e.g. "(142)"
     if (!reviewCount) {
       const cardText = await card.innerText();
       const parenMatch = cardText.match(/\((\d[\d\,\.\s]*)\)/);
@@ -102,20 +118,44 @@ async function extractBusiness(page, card) {
   let social_links = {};
 
   try {
-    // Click card to hydrate the full sidebar profile
-    await card.click();
+    // Capture the CURRENT panel's h1 text before we click, so we can prove
+    // the panel actually advanced to this business before reading from it.
+    const previousH1Text = await page
+      .locator("h1")
+      .first()
+      .innerText()
+      .catch(() => "");
+
+    // Click via the href we already captured rather than the original
+    // positional locator. Google Maps virtualizes the feed (detaches
+    // off-screen cards), so by the time we reach card #N in the loop, its
+    // original nth() index can silently resolve to a different element.
+    // href is a stable per-listing identity and avoids that drift.
+    if (googleMapsUrl) {
+      const stableTarget = page.locator(`a[href="${googleMapsUrl}"]`).first();
+      await stableTarget.click({ timeout: 5000 }).catch(async () => {
+        // Fall back to the original locator if the href-based one somehow
+        // isn't found (e.g. relative vs absolute href mismatch).
+        await card.click();
+      });
+    } else {
+      await card.click();
+    }
+
     await page.waitForSelector("h1", { timeout: 10000 });
+    await waitForPanelUpdate(page, previousH1Text);
+
+    // Scope detail extraction to the details pane where possible, to avoid
+    // accidentally matching unrelated links/text elsewhere on the page
+    // (e.g. the still-visible feed list, or Maps UI chrome).
+    const mainPanel = page.locator('div[role="main"]');
+    const scope = (await mainPanel.count()) > 0 ? mainPanel.first() : page;
 
     // ==========================================
     // STRATEGY 2: Sidebar Profile Fallbacks
     // ==========================================
-    // If rating or review count were missed on the feed card, extract from open sidebar
     if (!rating || !reviewCount) {
       try {
-        // Wait briefly for sidebar header metrics block to populate
-        await page.waitForTimeout(800);
-
-        // Sidebar Rating extraction
         if (!rating) {
           const sidebarRatingLocators = [
             'div[class*="F7nice"] span[aria-hidden="true"]',
@@ -123,10 +163,9 @@ async function extractBusiness(page, card) {
             'span[aria-label*="star"]',
             'div.fontBodyMedium span[role="img"]',
           ];
-
           for (const sel of sidebarRatingLocators) {
-            const el = page.locator(sel).first();
-            if (await el.isVisible({ timeout: 400 })) {
+            const el = scope.locator(sel).first();
+            if (await el.isVisible({ timeout: 1200 }).catch(() => false)) {
               const text =
                 (await el.innerText()) || (await el.getAttribute("aria-label"));
               rating = parseRatingString(text);
@@ -135,7 +174,6 @@ async function extractBusiness(page, card) {
           }
         }
 
-        // Sidebar Review Count extraction
         if (!reviewCount) {
           const sidebarReviewLocators = [
             'div[class*="F7nice"] button[aria-label*="review"]',
@@ -143,10 +181,9 @@ async function extractBusiness(page, card) {
             'button[aria-label*="opinions"]',
             'span[aria-label*="reviews"]',
           ];
-
           for (const sel of sidebarReviewLocators) {
-            const el = page.locator(sel).first();
-            if (await el.isVisible({ timeout: 400 })) {
+            const el = scope.locator(sel).first();
+            if (await el.isVisible({ timeout: 1200 }).catch(() => false)) {
               const text =
                 (await el.getAttribute("aria-label")) || (await el.innerText());
               reviewCount = parseReviewCountString(text);
@@ -166,13 +203,21 @@ async function extractBusiness(page, card) {
       'button[jsaction*="pane.rating.category"]',
       'button[jsaction*="category"]',
       'span[class*="fontBodyMedium"] button',
-      ".fontBodyMedium",
     ];
     for (const selector of categorySelectors) {
-      const catEl = page.locator(selector).first();
-      if (await catEl.isVisible({ timeout: 300 })) {
+      const catEl = scope.locator(selector).first();
+      if (await catEl.isVisible({ timeout: 800 }).catch(() => false)) {
         category = (await catEl.innerText()).trim();
         if (category) break;
+      }
+    }
+    // Last-resort fallback, guarded by length so it can't grab a paragraph
+    // of hours/address/description text instead of a short category chip.
+    if (!category) {
+      const catEl = scope.locator(".fontBodyMedium").first();
+      if (await catEl.isVisible({ timeout: 500 }).catch(() => false)) {
+        const text = (await catEl.innerText()).trim();
+        if (text && text.length <= 40) category = text;
       }
     }
 
@@ -184,8 +229,8 @@ async function extractBusiness(page, card) {
       'button[aria-label*="Address:"]',
     ];
     for (const selector of addressSelectors) {
-      const addEl = page.locator(selector).first();
-      if (await addEl.isVisible({ timeout: 300 })) {
+      const addEl = scope.locator(selector).first();
+      if (await addEl.isVisible({ timeout: 800 }).catch(() => false)) {
         address = (await addEl.innerText()).trim();
         if (address) break;
       }
@@ -199,8 +244,8 @@ async function extractBusiness(page, card) {
       'button[data-item-id*="phone"]',
     ];
     for (const selector of phoneSelectors) {
-      const phoneEl = page.locator(selector).first();
-      if (await phoneEl.isVisible({ timeout: 300 })) {
+      const phoneEl = scope.locator(selector).first();
+      if (await phoneEl.isVisible({ timeout: 800 }).catch(() => false)) {
         phone = (await phoneEl.innerText()).trim();
         if (phone) break;
       }
@@ -211,11 +256,10 @@ async function extractBusiness(page, card) {
       'a[data-item-id="authority"]',
       'a[aria-label*="Website:"]',
       'a[data-tooltip*="Open website"]',
-      'a[href^="http"]:not([href*="google.com"])',
     ];
     for (const selector of websiteSelectors) {
-      const webEl = page.locator(selector).first();
-      if (await webEl.isVisible({ timeout: 300 })) {
+      const webEl = scope.locator(selector).first();
+      if (await webEl.isVisible({ timeout: 800 }).catch(() => false)) {
         const href = await webEl.getAttribute("href");
         if (href && !href.includes("google.com/maps")) {
           website = href;
@@ -223,9 +267,20 @@ async function extractBusiness(page, card) {
         }
       }
     }
+    // Broad fallback only as an absolute last resort, and scoped to the
+    // details panel (not the whole page) to avoid grabbing unrelated links.
+    if (!website) {
+      const webEl = scope
+        .locator('a[href^="http"]:not([href*="google.com"])')
+        .first();
+      if (await webEl.isVisible({ timeout: 500 }).catch(() => false)) {
+        const href = await webEl.getAttribute("href");
+        if (href) website = href;
+      }
+    }
 
     // 7. Social Links extraction
-    const rawLinks = await page
+    const rawLinks = await scope
       .locator(
         'a[href*="facebook.com"], a[href*="instagram.com"], a[href*="linkedin.com"], a[href*="twitter.com"], a[href*="youtube.com"], a[href*="x.com"]',
       )
