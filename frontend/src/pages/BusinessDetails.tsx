@@ -77,7 +77,7 @@ export default function BusinessDetails() {
 
   const phones = business?.phone || [];
   const emails = business?.email || [];
-
+  
   const visiblePhones = showAllPhones
     ? phones
     : phones.slice(0, PHONE_PREVIEW_COUNT);

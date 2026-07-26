@@ -24,12 +24,11 @@ export interface Business {
   location: string;
   website: string | null;
   phone: string[];
+  email: string[];
 
-  // Contacts list
+  // Contacts list — empty array when no individual contacts were found
   contacts?: Contact[];
 
-  // Legacy / optional direct contact fields
-  email?: string[];
   contactPerson?: string;
 
   rating: number;
@@ -42,15 +41,13 @@ export interface Business {
   detectedProblems: string[];
   recommendedServices: string[];
 
-  // Email fields
-  emailId?: string | null; // 👈 Added optional emailId
+  emailId?: string | null;
   emailSubject: string;
   emailBody: string;
 
   source: string;
   addedAt: string;
 }
-
 export interface SearchRun {
   id: string;
   industry: string;
