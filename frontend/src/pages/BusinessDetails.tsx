@@ -77,7 +77,7 @@ export default function BusinessDetails() {
 
   const phones = business?.phone || [];
   const emails = business?.email || [];
-  
+
   const visiblePhones = showAllPhones
     ? phones
     : phones.slice(0, PHONE_PREVIEW_COUNT);
@@ -273,20 +273,21 @@ export default function BusinessDetails() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-5">
           {/* Business Info */}
-          <div className="bg-white rounded-card card-hairline p-5">
+          <div className="bg-white rounded-card card-hairline p-5 shadow-xs">
             <h3 className="font-display text-[14.5px] font-semibold text-ink-900-solid mb-4">
               Business Information
             </h3>
 
-            <ul className="space-y-3 text-[13px]">
-              <li className="flex items-center gap-2.5 text-ink-700">
+            <ul className="space-y-3.5 text-[13px]">
+              {/* Website */}
+              <li className="flex items-center gap-3 text-ink-700">
                 <Globe2 className="w-4 h-4 text-ink-400 shrink-0" />
                 {business.website ? (
                   <a
                     href={business.website}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:underline hover:text-signal-600 truncate"
+                    className="hover:underline hover:text-signal-600 truncate transition-colors"
                   >
                     {business.website}
                   </a>
@@ -295,20 +296,23 @@ export default function BusinessDetails() {
                 )}
               </li>
 
-              <li className="flex items-start gap-2.5 text-ink-700">
-                <Mail className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-1.5 min-w-0">
+              {/* Emails */}
+              <li className="flex items-start gap-3 text-ink-700">
+                <Mail className="w-4 h-4 text-ink-400 shrink-0 mt-1" />
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                   {emails.length > 0 ? (
                     <>
-                      {visibleEmails.map((emailString, idx) => (
-                        <a
-                          key={idx}
-                          href={`mailto:${emailString}`}
-                          className="hover:underline hover:text-signal-600 break-all"
-                        >
-                          {emailString}
-                        </a>
-                      ))}
+                      <div className="flex flex-col gap-1.5">
+                        {visibleEmails.map((emailString, idx) => (
+                          <a
+                            key={idx}
+                            href={`mailto:${emailString}`}
+                            className="hover:underline hover:text-signal-600 break-all transition-colors block"
+                          >
+                            {emailString}
+                          </a>
+                        ))}
+                      </div>
 
                       {emails.length > EMAIL_PREVIEW_COUNT && (
                         <button
@@ -335,17 +339,18 @@ export default function BusinessDetails() {
                 </div>
               </li>
 
-              <li className="flex items-start gap-2.5 text-ink-700">
-                <Phone className="w-4 h-4 text-ink-400 shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-1.5 min-w-0 w-full">
+              {/* Phone Numbers */}
+              <li className="flex items-start gap-3 text-ink-700">
+                <Phone className="w-4 h-4 text-ink-400 shrink-0 mt-1" />
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                   {phones.length > 0 ? (
                     <>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-col gap-1.5">
                         {visiblePhones.map((phoneString, idx) => (
                           <a
                             key={idx}
                             href={`tel:${phoneString}`}
-                            className="text-[12.5px] px-2.5 py-1 rounded-full bg-paper-50 border border-paper-100 text-ink-700 hover:border-signal-200 hover:text-signal-600 transition-colors"
+                            className="hover:underline hover:text-signal-600 transition-colors block"
                           >
                             {phoneString}
                           </a>
@@ -377,12 +382,14 @@ export default function BusinessDetails() {
                 </div>
               </li>
 
-              <li className="flex items-center gap-2.5 text-ink-700">
+              {/* Socials */}
+              <li className="flex items-center gap-3 text-ink-700">
                 <Share2 className="w-4 h-4 text-ink-400 shrink-0" />
-                Instagram, Facebook
+                <span className="truncate">Instagram, Facebook</span>
               </li>
             </ul>
 
+            {/* Metrics Grid */}
             <div className="mt-4 pt-4 border-t border-paper-100 grid grid-cols-2 gap-3 text-[12.5px]">
               <div>
                 <p className="text-ink-500">Rating</p>
