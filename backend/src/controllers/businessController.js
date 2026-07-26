@@ -413,7 +413,7 @@ exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
   }
 };
 
-businessController.js;
+
 
 exports.getBusinesses = async (req, res) => {
   try {
@@ -702,3 +702,4 @@ exports.getBusinessDetails = async (req, res) => {
     });
   }
 };
+
