@@ -1,3 +1,5 @@
+// backend\src\controllers\emailController.js
+
 const pool = require("../db");
 const { GoogleGenAI } = require("@google/genai");
 

@@ -1,5 +1,7 @@
+// backend\src\controllers\businessController.js
 const pool = require("../db");
 const axios = require("axios");
+const { reconcileCampaignStatus } = require("../utils/campaignStatus");
 
 // Put your enrichment webhook URL here (save to .env later as N8N_ENRICHMENT_WEBHOOK_URL)
 const N8N_ENRICHMENT_WEBHOOK =
@@ -12,10 +14,9 @@ exports.insertBusinesses = async (req, res) => {
   const { jobId, campaignId, businesses } = req.body;
 
   if (!businesses || !Array.isArray(businesses)) {
-    return res.status(400).json({
-      success: false,
-      message: "Payload missing 'businesses' array.",
-    });
+    return res
+      .status(400)
+      .json({ success: false, message: "Payload missing 'businesses' array." });
   }
 
   const client = await pool.connect();
@@ -24,20 +25,17 @@ exports.insertBusinesses = async (req, res) => {
   let insertedCount = 0;
   let skippedCount = 0;
   const queuedJobsToDispatch = [];
+  let jobOutput = null;
 
   try {
     await client.query("BEGIN");
 
     for (const business of businesses) {
-      // 1. Insert business with new email and jsonb phone fields
       const result = await client.query(
         `
         INSERT INTO businesses
-        (
-          campaign_id, name, category, address, city, country, 
-          phone, email, website, google_maps_url, google_rating, 
-          review_count, social_links, source, workflow_status
-        )
+        (campaign_id, name, category, address, city, country, phone, email, website,
+         google_maps_url, google_rating, review_count, social_links, source, workflow_status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'enriching')
         ON CONFLICT (campaign_id, google_maps_url) DO NOTHING
         RETURNING id
@@ -49,8 +47,8 @@ exports.insertBusinesses = async (req, res) => {
           business.address,
           business.city,
           business.country,
-          JSON.stringify(business.phone || []), // ✅ Converted to JSONB Array
-          JSON.stringify(business.email || []), // ✅ New JSONB Array
+          JSON.stringify(business.phone || []),
+          JSON.stringify(business.email || []),
           business.website,
           business.google_maps_url,
           business.google_rating,
@@ -60,23 +58,19 @@ exports.insertBusinesses = async (req, res) => {
         ],
       );
 
-      // 2. If row inserted (not skipped), create its corresponding enrichment job
       if (result.rows.length > 0) {
         insertedCount++;
         const businessId = result.rows[0].id;
 
         const jobResult = await client.query(
-          `
-          INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
-          VALUES ($1, $2, 'contact_enrichment', 'queued', $3)
-          RETURNING id
-          `,
+          `INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
+           VALUES ($1, $2, 'contact_enrichment', 'queued', $3) RETURNING id`,
           [campaignId, businessId, JSON.stringify({ businessId })],
         );
 
         queuedJobsToDispatch.push({
           jobId: jobResult.rows[0].id,
-          businessId: businessId,
+          businessId,
           companyName: business.name,
           location: business.address || business.city || "",
         });
@@ -85,77 +79,83 @@ exports.insertBusinesses = async (req, res) => {
       }
     }
 
-    // 3. Update campaign status and count
     await client.query(
-      `
-      UPDATE campaigns 
-      SET 
-        status = 'enriching',
-        total_leads = (SELECT COUNT(*)::int FROM businesses WHERE campaign_id = $1),
-        updated_at = NOW()
-      WHERE id = $1
-      `,
+      `UPDATE campaigns SET status = 'enriching',
+         total_leads = (SELECT COUNT(*)::int FROM businesses WHERE campaign_id = $1),
+         updated_at = NOW() WHERE id = $1`,
       [campaignId],
     );
 
-    // 4. Record execution log output
     const executionTime = `${((Date.now() - startTime) / 1000).toFixed(2)}s`;
-    const jobOutput = {
+    jobOutput = {
       inserted: insertedCount,
       skipped: skippedCount,
       executionTime,
       source: "google_maps_with_firecrawl",
     };
 
-    await client.query(
-      `
-      UPDATE automation_jobs
-      SET output = $2
-      WHERE id = $1
-      `,
-      [jobId, JSON.stringify(jobOutput)],
-    );
+    await client.query(`UPDATE automation_jobs SET output = $2 WHERE id = $1`, [
+      jobId,
+      JSON.stringify(jobOutput),
+    ]);
 
     await client.query("COMMIT");
-
-    res.json({
-      success: true,
-      ...jobOutput,
-    });
-
-    // 7. Dispatch to Scraper Service for Contact Enrichment (Unchanged)
-    if (queuedJobsToDispatch.length > 0) {
-      Promise.allSettled(
-        queuedJobsToDispatch.map((job) =>
-          axios.post(
-            `${SCRAPER_SERVICE_URL}/contact-enrichment`,
-            {
-              jobId: job.jobId,
-              businessId: job.businessId,
-              companyName: job.companyName,
-              location: job.location,
-            },
-            { timeout: 15000 },
-          ),
-        ),
-      ).then((results) => {
-        results.forEach((res, idx) => {
-          if (res.status === "rejected") {
-            console.error(
-              `[Push Dispatcher Error] Failed to trigger Job ${queuedJobsToDispatch[idx].jobId}:`,
-              res.reason.message,
-            );
-          }
-        });
-      });
-    }
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Bulk Ingestion Layer Error:", err);
-    res.status(500).json({ success: false, message: err.message });
-  } finally {
     client.release();
+    return res.status(500).json({ success: false, message: err.message });
   }
+
+  client.release();
+
+  // Dispatch is now OUTSIDE the transaction block entirely — a dispatch
+  // failure can never trigger a rollback attempt on an already-committed
+  // transaction. We also await this fully before responding: this endpoint
+  // is called server-to-server by the scraper (already not blocking any
+  // end user), and on Vercel, code after res.json() isn't guaranteed to
+  // keep running — awaiting first avoids jobs silently never getting
+  // dispatched or reconciled.
+  if (queuedJobsToDispatch.length > 0) {
+    const results = await Promise.allSettled(
+      queuedJobsToDispatch.map((job) =>
+        axios.post(
+          `${SCRAPER_SERVICE_URL}/contact-enrichment`,
+          {
+            jobId: job.jobId,
+            businessId: job.businessId,
+            companyName: job.companyName,
+            location: job.location,
+          },
+          { timeout: 15000 },
+        ),
+      ),
+    );
+
+    for (let idx = 0; idx < results.length; idx++) {
+      const result = results[idx];
+      const job = queuedJobsToDispatch[idx];
+      if (result.status === "rejected") {
+        console.error(
+          `[Push Dispatcher Error] Job ${job.jobId}:`,
+          result.reason.message,
+        );
+        await pool.query(
+          `UPDATE automation_jobs SET status = 'failed', completed_at = NOW(),
+             input = input || jsonb_build_object('error', $2::text) WHERE id = $1`,
+          [job.jobId, result.reason.message],
+        );
+        await pool.query(
+          `UPDATE businesses SET workflow_status = 'failed' WHERE id = $1`,
+          [job.businessId],
+        );
+      }
+    }
+  }
+
+  await reconcileCampaignStatus(campaignId);
+
+  res.json({ success: true, ...jobOutput });
 };
 
 exports.getBusinessById = async (req, res) => {
@@ -249,89 +249,68 @@ exports.saveAnalysisResults = async (req, res) => {
   const { jobId, businessId, campaignId, contactId, analysis } = req.body;
 
   if (!businessId || !analysis) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing businessId or analysis payload.",
-    });
+    return res
+      .status(400)
+      .json({
+        success: false,
+        message: "Missing businessId or analysis payload.",
+      });
   }
 
+  const isPartial = !!req.body.partial;
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    // 1. Insert or Update website_analysis
     const logoInitials = req.body.businessName
       ? req.body.businessName.substring(0, 2).toUpperCase()
       : "BI";
+    const aiScore = analysis.aiScore ?? (isPartial ? null : 75);
 
     await client.query(
-      `
-      INSERT INTO website_analysis 
-        (business_id, analysis_status, detected_problems, recommendations, ai_score, logo_initials, logo_color)
-      VALUES ($1, 'completed', $2, $3, $4, $5, 'signal')
-      ON CONFLICT (id) DO NOTHING
-      `,
+      `INSERT INTO website_analysis
+         (business_id, analysis_status, detected_problems, recommendations, ai_score, logo_initials, logo_color)
+       VALUES ($1, $2, $3, $4, $5, $6, 'signal')
+       ON CONFLICT (id) DO NOTHING`,
       [
         businessId,
+        isPartial ? "partial" : "completed",
         JSON.stringify(analysis.detectedProblems || []),
         JSON.stringify(analysis.recommendedServices || []),
-        analysis.aiScore || 75,
+        aiScore,
         logoInitials,
       ],
     );
 
-    // 2. Insert into lead_scores
-    await client.query(
-      `
-      INSERT INTO lead_scores (business_id, score, reasons)
-      VALUES ($1, $2, $3)
-      `,
-      [
-        businessId,
-        analysis.aiScore || 75,
-        JSON.stringify(analysis.detectedProblems || []),
-      ],
-    );
+    if (!isPartial) {
+      await client.query(
+        `INSERT INTO lead_scores (business_id, score, reasons) VALUES ($1, $2, $3)`,
+        [businessId, aiScore, JSON.stringify(analysis.detectedProblems || [])],
+      );
 
-    // 3. Draft Email in emails table (Pending Human Approval)
-    await client.query(
-      `
-      INSERT INTO emails (campaign_id, business_id, contact_id, subject, body, status)
-      VALUES ($1, $2, $3, $4, $5, 'draft')
-      `,
-      [
-        campaignId,
-        businessId,
-        contactId || null,
-        analysis.emailSubject || "Partnership Opportunity",
-        analysis.emailBody || "",
-      ],
-    );
+      await client.query(
+        `INSERT INTO emails (campaign_id, business_id, contact_id, subject, body, status)
+         VALUES ($1, $2, $3, $4, $5, 'draft')`,
+        [
+          campaignId,
+          businessId,
+          contactId || null,
+          analysis.emailSubject || "Partnership Opportunity",
+          analysis.emailBody || "",
+        ],
+      );
+    }
 
-    // 4. Update Business Status
     await client.query(
-      `
-      UPDATE businesses 
-      SET workflow_status = 'analyzed' 
-      WHERE id = $1
-      `,
-      [businessId],
+      `UPDATE businesses SET workflow_status = $2 WHERE id = $1`,
+      [businessId, isPartial ? "analysis_failed" : "analyzed"],
     );
 
     await client.query("COMMIT");
 
-    const remainingJobs = await client.query(
-      `SELECT COUNT(*)::int FROM automation_jobs WHERE campaign_id = $1 AND status IN ('queued', 'running')`,
-      [campaignId],
-    );
-
-    if (parseInt(remainingJobs.rows[0].count, 10) === 0) {
-      await client.query(
-        `UPDATE campaigns SET status = 'completed', updated_at = NOW() WHERE id = $1`,
-        [campaignId],
-      );
-    }
+    // Reconcile before responding — see note in insertBusinesses above.
+    if (campaignId) await reconcileCampaignStatus(campaignId);
 
     res.json({
       success: true,
@@ -340,6 +319,18 @@ exports.saveAnalysisResults = async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Save Analysis Error:", err);
+    try {
+      await pool.query(
+        `UPDATE businesses SET workflow_status = 'failed' WHERE id = $1`,
+        [businessId],
+      );
+      if (campaignId) await reconcileCampaignStatus(campaignId);
+    } catch (e2) {
+      console.error(
+        "Failed to mark business as failed after save error:",
+        e2.message,
+      );
+    }
     res.status(500).json({ success: false, message: err.message });
   } finally {
     client.release();
@@ -350,15 +341,17 @@ exports.saveAnalysisResults = async (req, res) => {
  * Dispatcher function to send a business + contact to Scraper Server for analysis
  */
 exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
+  let jobId;
+  let campaignId;
+
   try {
-    // Fetch business details
     const bizRes = await pool.query(`SELECT * FROM businesses WHERE id = $1`, [
       businessId,
     ]);
     if (bizRes.rows.length === 0) return;
     const business = bizRes.rows[0];
+    campaignId = business.campaign_id;
 
-    // Fetch contact details if available
     let contact = null;
     if (contactId) {
       const contactRes = await pool.query(
@@ -367,7 +360,6 @@ exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
       );
       if (contactRes.rows.length > 0) contact = contactRes.rows[0];
     } else {
-      // Grab top contact for this business if not specified
       const topContactRes = await pool.query(
         `SELECT * FROM contacts WHERE business_id = $1 ORDER BY confidence_score DESC LIMIT 1`,
         [businessId],
@@ -375,39 +367,53 @@ exports.dispatchWebsiteAnalysis = async (businessId, contactId = null) => {
       if (topContactRes.rows.length > 0) contact = topContactRes.rows[0];
     }
 
-    // Create automation job record
     const jobResult = await pool.query(
-      `
-      INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
-      VALUES ($1, $2, 'website_analysis', 'queued', $3)
-      RETURNING id
-      `,
+      `INSERT INTO automation_jobs (campaign_id, business_id, job_type, status, input)
+       VALUES ($1, $2, 'website_analysis', 'queued', $3) RETURNING id`,
       [
         business.campaign_id,
         businessId,
         JSON.stringify({ businessId, contactId }),
       ],
     );
+    jobId = jobResult.rows[0].id;
 
-    const jobId = jobResult.rows[0].id;
-
-    // Trigger Scraper Server asynchronously
-    await axios.post(`${SCRAPER_SERVICE_URL}/website-analysis`, {
-      jobId,
-      business,
-      contact,
-    });
+    // timeout is critical here — without it a hung scraper leaves this job
+    // (and the whole campaign) stuck indefinitely.
+    await axios.post(
+      `${SCRAPER_SERVICE_URL}/website-analysis`,
+      { jobId, business, contact },
+      { timeout: 15000 },
+    );
 
     console.log(
-      `[Dispatch Analysis] Successfully queued Job ${jobId} for Business ${businessId}`,
+      `[Dispatch Analysis] Queued Job ${jobId} for Business ${businessId}`,
     );
   } catch (err) {
     console.error(
       `[Dispatch Analysis Error] Business ${businessId}:`,
       err.message,
     );
+
+    if (jobId) {
+      await pool.query(
+        `UPDATE automation_jobs
+         SET status = 'failed', completed_at = NOW(),
+             input = input || jsonb_build_object('error', $2::text)
+         WHERE id = $1`,
+        [jobId, err.message],
+      );
+    }
+    await pool.query(
+      `UPDATE businesses SET workflow_status = 'failed' WHERE id = $1`,
+      [businessId],
+    );
+  } finally {
+    if (campaignId) await reconcileCampaignStatus(campaignId);
   }
 };
+
+businessController.js;
 
 exports.getBusinesses = async (req, res) => {
   try {

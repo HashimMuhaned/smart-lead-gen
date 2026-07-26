@@ -1,4 +1,4 @@
-// backend/src/services/scraperService.js (or replace content in n8nService.js)
+// backend/src/services/scraperService.js
 const axios = require("axios");
 
 const SCRAPER_URL = "https://scrape-service.n8nselfhostedautomations.tech/google-maps";
